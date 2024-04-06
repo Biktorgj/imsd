@@ -12,49 +12,71 @@
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+#include <libqmi-glib.h>
+#include <libqrtr-glib.h>
+#include <glib.h>
+#include <glib/gprintf.h>
+#include <gio/gio.h>
+#include <glib-unix.h>
+
 /* Local includes */
 #include "imsd.h"
 #include "ims_settings.h"
 #include "ims_presence.h"
 #include "ims_rtp.h"
 #include "ims_video.h"
+
 /*
  *  The basic idea:
  *
  *   We need a tool which 
- *      1. Connects to the modem via either QMI or QRTR
- *      2. Retrieves the current IMS Settings from the modem and stores them
- *      3. Reads the current carrier and checks against its internal DB of the correct settings
- *      4. Deviates or corrects the settings stored in the modem with what they should be
- *      5. Starts IMS Presence, IMS RTP and the telephony server if they are stopped.
- *      6. ???? 
+ *      1. Connects to the modem via QRTR
+ *      2. Gets all sims and their MCC and MNC
+ *      3. Check if all the IMS services are up in the baseband
+ *      4. Foreach, get the profiles associated with those carriers
+ *          If settings in baseband differ from from local, update them via IMSS
+ *      5. Bring up ims apns via WDS for each sim
+ *      6. ???
  *
  *
  *
 */
+
+static GMainLoop *loop = NULL;
+static GCancellable *cancellable;
+static QmiDevice *device;
+static QrtrBus *qrtr_bus;
+
 struct {
     uint8_t verbose;
     pthread_t main_thread;
 } runtime;
 
-void *imsd_init() {
-    fprintf(stdout, "We're in another thread!\n");
-    return NULL;
-}
+static gboolean quit_cb(gpointer user_data)
+{
+    g_info("Caught signal, shutting down...");
 
+    if (loop)
+        g_idle_add((GSourceFunc)g_main_loop_quit, loop);
+    else
+        exit(0);
+
+    return FALSE;
+}
 
 int main(int argc, char **argv) {
   int ret, lockfile;
   runtime.verbose = false;
-  fprintf(stdout, "IMS Daemon\n");
+  fprintf(stdout, "IMS Daemon %s %s \n", RELEASE_VER);
 
   /* Begin */
   while ((ret = getopt(argc, argv, "dvh")) != -1)
@@ -86,18 +108,20 @@ int main(int argc, char **argv) {
   }
 
   if (flock(lockfile, LOCK_EX | LOCK_NB) < 0) {
-    fprintf(stderr, "%s: OpenQTI is already running, bailing out\n", __func__);
+    fprintf(stderr, "%s is already running!\n", PROG_NAME);
     return -EBUSY;
   }
 
-  fprintf(stdout, "Start our main thread\n");
-  if ((ret = pthread_create(&runtime.main_thread, NULL, &imsd_init, NULL))) {
-    fprintf(stderr, "Error creating the main thread!\n");
-  }
+  g_unix_signal_add(SIGTERM, quit_cb, NULL);
+  g_unix_signal_add(SIGINT, quit_cb, NULL);
 
-  /* We join our main thread and wait for it to exit */
-  pthread_join(runtime.main_thread, NULL);
+  loop = g_main_loop_new(NULL, FALSE);
+
+  // Let's start here
   
+  g_main_loop_run(loop);
+  g_main_loop_unref(loop);
+
   close(lockfile);
   unlink(LOCK_FILE);
   return 0;
