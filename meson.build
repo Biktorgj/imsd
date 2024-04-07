@@ -44,5 +44,6 @@ glib_deps = declare_dependency(
 
 executable('imsd',
   'imsd.c',
+  'conn-manager.c',
   dependencies: deps,
 )
