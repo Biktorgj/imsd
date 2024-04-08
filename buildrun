@@ -1,0 +1,3 @@
+#!/bin/sh
+rm -rf build ; meson setup build ; ninja -C build && ./build/imsd --device=qrtr://0
+

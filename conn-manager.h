@@ -12,7 +12,10 @@
 
 G_BEGIN_DECLS
 
+void get_autoconnect_settings();
+
 void cancel_connection_manager();
+void release_clients ();
 gboolean create_client_connection(GFile *file);
 
 G_END_DECLS

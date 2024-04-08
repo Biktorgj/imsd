@@ -63,13 +63,9 @@ static gboolean quit_cb(gpointer user_data) {
     if (!g_cancellable_is_cancelled(cancellable)) {
       g_printerr("Stopping IMSD...\n");
       g_cancellable_cancel(cancellable);
-      g_printerr("Stopping IMSD done...\n");
-      /* Re-set the signal handler to allow main loop cancellation on
-       * second signal */
-      return G_SOURCE_CONTINUE;
     }
   }
-
+  g_printerr("Exiting!\n");
   if (loop)
     g_idle_add((GSourceFunc)g_main_loop_quit, loop);
   else
@@ -100,9 +96,6 @@ int main(int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-  /* Build new GFile from the commandline arg */
-  file = g_file_new_for_commandline_arg(device_str);
-
   /* We shall only start once */
   if ((lockfile = open(LOCK_FILE, O_RDWR | O_CREAT | O_TRUNC, 0660)) == -1) {
     fprintf(stderr, "%s: Can't create the lock file!\n", __func__);
@@ -113,6 +106,11 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%s is already running!\n", PROG_NAME);
     return -EBUSY;
   }
+  
+  /* Build new GFile from the commandline arg */
+  file = g_file_new_for_commandline_arg(device_str);
+
+
   cancellable = g_cancellable_new();
 
   g_unix_signal_add(SIGTERM, quit_cb, NULL);
@@ -121,7 +119,7 @@ int main(int argc, char **argv) {
   loop = g_main_loop_new(NULL, FALSE);
 
   // Let's start here
-    if (!create_client_connection (file))
+  if (!create_client_connection (file))
         return EXIT_FAILURE;
 
   g_main_loop_run(loop);
