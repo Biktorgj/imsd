@@ -35,8 +35,8 @@
  *  The basic idea:
  *
  *   We need a tool which
- *      1. Connects to the modem via QRTR / MSMIPC
- *      2. Gets all sims and their MCC and MNC
+ *  * [x]    1. Connects to the modem via QRTR / MSMIPC
+ *    [x] (default sim only)  2. Gets all sims and their MCC and MNC
  *      3. Check if all the IMS services are up in the baseband
  *      4. Foreach, get the profiles associated with those carriers
  *          If settings in baseband differ from from local, update them via IMSS
@@ -119,9 +119,10 @@ int main(int argc, char **argv) {
   loop = g_main_loop_new(NULL, FALSE);
 
   // Let's start here
-  if (!create_client_connection (file))
+  if (!create_client_connection (file, cancellable))
         return EXIT_FAILURE;
 
+  g_printerr("This should run after we connected\n");
   g_main_loop_run(loop);
   g_main_loop_unref(loop);
 
@@ -129,5 +130,6 @@ int main(int argc, char **argv) {
     g_object_unref(cancellable);
   close(lockfile);
   unlink(LOCK_FILE);
+  g_printerr("bye bye!\n");
   return 0;
 }

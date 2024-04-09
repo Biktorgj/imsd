@@ -46,5 +46,6 @@ executable('imsd',
   'imsd.c',
   'conn-manager.c',
   'wds.c',
+  'nas.c',
   dependencies: deps,
 )
