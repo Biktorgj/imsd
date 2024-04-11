@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2024, Biktorgj
  */
-#include "conn-manager.h"
+#include "qmi-ims-client.h"
 #include "wds.h"
 #include "nas.h"
 #include <gio/gio.h>
@@ -83,8 +83,8 @@ static void release_client_ready(QmiDevice *dev, GAsyncResult *res,
   } else {
     g_printerr("Client released!\n");
   }
-
   client = FALSE;
+
   if (!ctx->wds.allocated && !ctx->nas.allocated && !ctx->imss.allocated &&
       !ctx->imsa.allocated && !ctx->imsp.allocated && !ctx->imsrtp.allocated) {
     g_printerr("Closing device\n");
@@ -257,7 +257,7 @@ static void bus_new_callback(GObject *source, GAsyncResult *res,
                            (GAsyncReadyCallback)qmi_device_ready, NULL);
 }
 
-gboolean create_client_connection(GFile *file, GCancellable *cancellable) {
+gboolean create_qmi_client_connection(GFile *file, GCancellable *cancellable) {
   g_autofree gchar *fd = NULL;
   ctx = g_slice_new(Context);
   ctx->cancellable = g_object_ref(cancellable);

@@ -44,7 +44,7 @@ glib_deps = declare_dependency(
 
 executable('imsd',
   'imsd.c',
-  'conn-manager.c',
+  'qmi-ims-client.c',
   'wds.c',
   'nas.c',
   dependencies: deps,

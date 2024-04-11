@@ -3,8 +3,8 @@
  * Copyright (c) 2024, Biktorgj
  */
 
-#ifndef CONN_MANAGER_H
-#define CONN_MANAGER_H
+#ifndef QMI_IMS_CLIENT_H
+#define QMI_IMS_CLIENT_H
 
 #include <glib.h>
 #include <gio/gio.h>
@@ -16,7 +16,7 @@ void get_autoconnect_settings();
 
 void cancel_connection_manager();
 void release_clients ();
-gboolean create_client_connection(GFile *file, GCancellable *cancellable);
+gboolean create_qmi_client_connection(GFile *file, GCancellable *cancellable);
 
 G_END_DECLS
 

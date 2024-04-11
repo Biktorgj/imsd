@@ -28,7 +28,7 @@
 #include <libqrtr-glib.h>
 
 /* Local includes */
-#include "conn-manager.h"
+#include "qmi-ims-client.h"
 #include "imsd.h"
 
 /*
@@ -119,7 +119,12 @@ int main(int argc, char **argv) {
   loop = g_main_loop_new(NULL, FALSE);
 
   // Let's start here
-  if (!create_client_connection (file, cancellable))
+  /*
+    We're hardcoding this to QMI for now
+    But we could easily have different codepaths depending
+    on the device used
+  */
+  if (!create_qmi_client_connection (file, cancellable))
         return EXIT_FAILURE;
 
   g_printerr("This should run after we connected\n");

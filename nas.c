@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2024, Biktorgj
  */
-#include "conn-manager.h"
+#include "qmi-ims-client.h"
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <glib.h>
@@ -15,17 +15,23 @@ typedef struct {
   QmiDevice *device;
   QmiClientNas *client;
   GCancellable *cancellable;
+  gboolean enable;
 } Context;
+
+static Context *ctx;
 
 typedef struct {
     guint16 mcc;
     guint16 mnc;
 } Carrier;
 
-static Carrier *current_carrier;
+typedef struct {
+    QmiClientNas *client;
+    gboolean enable; /* TRUE for enabling, FALSE for disabling */
+    gboolean system_info_checked;
+} UnsolicitedRegistrationEventsContext;
 
-static Context *ctx;
-
+static Carrier current_carrier;
 
 static void get_home_network_ready(QmiClientNas *client, GAsyncResult *res) {
   QmiMessageNasGetHomeNetworkOutput *output;
@@ -35,7 +41,6 @@ static void get_home_network_ready(QmiClientNas *client, GAsyncResult *res) {
   if (!output) {
     g_printerr("error: operation failed: %s\n", error->message);
     g_error_free(error);
-    //   operation_shutdown (FALSE);
     return;
   }
 
@@ -43,14 +48,8 @@ static void get_home_network_ready(QmiClientNas *client, GAsyncResult *res) {
     g_printerr("error: couldn't get home network: %s\n", error->message);
     g_error_free(error);
     qmi_message_nas_get_home_network_output_unref(output);
-    //   operation_shutdown (FALSE);
     return;
   }
-
-  g_print("[%s] Successfully got home network:\n",
-          qmi_device_get_path_display(ctx->device));
-
-  {
     guint16 mcc;
     guint16 mnc;
     const gchar *description;
@@ -58,54 +57,9 @@ static void get_home_network_ready(QmiClientNas *client, GAsyncResult *res) {
     qmi_message_nas_get_home_network_output_get_home_network(
         output, &mcc, &mnc, &description, NULL);
 
-    g_print("\tHome network:\n"
-            "\t\tMCC: '%" G_GUINT16_FORMAT "'\n"
-            "\t\tMNC: '%" G_GUINT16_FORMAT "'\n"
-            "\t\tDescription: '%s'\n",
-            mcc, mnc, description);
-  }
-
-  {
-    QmiNasNetworkNameSource network_name_source;
-    if (qmi_message_nas_get_home_network_output_get_network_name_source(
-            output, &network_name_source, NULL)) {
-      g_print("\tNetwork name source: %s\n",
-              qmi_nas_network_name_source_get_string(network_name_source));
-    }
-  }
-
-  {
-    guint16 sid;
-    guint16 nid;
-
-    if (qmi_message_nas_get_home_network_output_get_home_system_id(
-            output, &sid, &nid, NULL)) {
-      g_print("\t\tSID: '%" G_GUINT16_FORMAT "'\n"
-              "\t\tNID: '%" G_GUINT16_FORMAT "'\n",
-              sid, nid);
-    }
-  }
-
-  {
-    guint16 mcc;
-    guint16 mnc;
-    QmiNasNetworkDescriptionEncoding description_encoding;
-    GArray *description_array;
-
-    if (qmi_message_nas_get_home_network_output_get_home_network_3gpp2_ext(
-            output, &mcc, &mnc, NULL, /* display_description */
-            &description_encoding, &description_array, NULL)) {
-      g_autofree gchar *description = NULL;
-
-      description = qmi_nas_read_string_from_network_description_encoded_array(
-          description_encoding, description_array);
-      g_print("\t3GPP2 Home network (extended):\n"
-              "\t\tMCC: '%" G_GUINT16_FORMAT "'\n"
-              "\t\tMNC: '%" G_GUINT16_FORMAT "'\n"
-              "\t\tDescription: '%s'\n",
-              mcc, mnc, description ?: "");
-    }
-  }
+    g_print("Home network: '%" G_GUINT16_FORMAT "'-'%" G_GUINT16_FORMAT "'\n",  mcc, mnc);
+    current_carrier.mcc = mcc;
+    current_carrier.mnc = mnc;
 
   qmi_message_nas_get_home_network_output_unref(output);
 }
@@ -117,6 +71,77 @@ void get_home_network() {
                                   NULL);
   return;
 }
+/* EVENT REPORT TESTING: First attempt
+  So, we need to know if signal gets lost, recovered, or somethng fails
+  in between. Then we need to get event reports from the NAS service.
+  This is the first test to see if we can tell the baseband to inform us
+  about those things. From there we can go on with the rest.
+
+
+
+*/
+
+
+
+static void get_event_report_ready(QmiClientNas *client, GAsyncResult *res) {
+  QmiMessageNasSetEventReportOutput *output;
+  GError *error = NULL;
+  g_printerr("%s: We have been called!\n", __func__);
+  output = qmi_client_nas_set_event_report_finish(client, res, &error);
+  if (!output) {
+    g_printerr("error: operation failed: %s\n", error->message);
+    g_error_free(error);
+    return;
+  } else {
+    g_printerr("The command went through!\n");
+  }
+  
+  
+}
+void set_event_report() {
+  g_info("Enabling event reporting for NAS: Test 1\n");
+  qmi_client_nas_set_event_report(ctx->client, NULL, 10, ctx->cancellable,
+                                  (GAsyncReadyCallback)get_event_report_ready,
+                                  NULL);
+}
+
+/* Indications */
+
+static void ri_serving_system_or_system_info_ready(QmiClientNas *client, GAsyncResult *res) {
+  QmiMessageNasRegisterIndicationsOutput *output;
+  GError *error = NULL;
+  g_printerr("[%s] We have been called!\n", __func__);
+  output = qmi_client_nas_register_indications_finish(client, res, &error);
+  if (!output) {
+    g_printerr("error: operation failed: %s\n", error->message);
+    g_error_free(error);
+    return;
+  } else {
+    g_printerr("The command went through!\n");
+  }
+  
+  
+}
+
+
+void enable_nas_indications() {
+  g_printerr("* Enabling NAS indications: Test 2\n");
+    g_autoptr(QmiMessageNasRegisterIndicationsInput)  input = NULL;
+
+    input = qmi_message_nas_register_indications_input_new ();
+
+    qmi_message_nas_register_indications_input_set_serving_system_events (input, FALSE, NULL);
+
+    qmi_message_nas_register_indications_input_set_network_reject_information (input, ctx->enable, FALSE, NULL);
+    qmi_client_nas_register_indications (
+        ctx->client,
+        input,
+        5,
+        NULL,
+        (GAsyncReadyCallback)ri_serving_system_or_system_info_ready,
+        NULL);
+
+}
 
 void nas_start(QmiDevice *device, QmiClientNas *client,
                GCancellable *cancellable) {
@@ -126,5 +151,8 @@ void nas_start(QmiDevice *device, QmiClientNas *client,
   ctx->device = g_object_ref(device);
   ctx->client = g_object_ref(client);
   ctx->cancellable = g_object_ref(cancellable);
+  ctx->enable = TRUE;
   get_home_network();
+  set_event_report();
+  enable_nas_indications();
 }
