@@ -28,8 +28,8 @@
 #include <libqrtr-glib.h>
 
 /* Local includes */
-#include "qmi-ims-client.h"
 #include "imsd.h"
+#include "qmi-ims-client.h"
 
 /*
  *  The basic idea:
@@ -49,19 +49,25 @@
 
 static GMainLoop *loop = NULL;
 static GCancellable *cancellable;
+typedef struct {
+  gchar *device_arg;
+  gboolean version;
+} _CmdLine;
 
-static gchar *device_str;
-
-static GOptionEntry main_entries[] = {
-    {"device", 'd', 0, G_OPTION_ARG_STRING, &device_str}};
+_CmdLine CmdLine;
+static GOptionEntry imsd_params[] = {
+    {"device", 'd', 0, G_OPTION_ARG_STRING, &CmdLine.device_arg},
+    {"version", 'v', 0, G_OPTION_ARG_NONE, &CmdLine.version},
+    {NULL}
+    };
 
 static gboolean quit_cb(gpointer user_data) {
   g_printerr("Caught signal, shutting down...\n");
-  cancel_connection_manager();
   if (cancellable) {
     /* Ignore consecutive requests of cancellation */
     if (!g_cancellable_is_cancelled(cancellable)) {
       g_printerr("Stopping IMSD...\n");
+      cancel_connection_manager();
       g_cancellable_cancel(cancellable);
     }
   }
@@ -83,15 +89,20 @@ int main(int argc, char **argv) {
 
   context = g_option_context_new("- IMSD configuration params");
 
-  g_option_context_add_main_entries(context, main_entries, NULL);
+  g_option_context_add_main_entries(context, imsd_params, NULL);
   if (!g_option_context_parse(context, &argc, &argv, &error)) {
     g_printerr("Error: %s\n", error->message);
     exit(EXIT_FAILURE);
   }
   g_option_context_free(context);
 
+  if (CmdLine.version) {
+    g_printerr("%s version %s\n", PROG_NAME, RELEASE_VER);
+    exit(EXIT_SUCCESS);
+  }
+
   /* No device path given? */
-  if (!device_str) {
+  if (!CmdLine.device_arg) {
     g_printerr("error: no device path specified\n");
     exit(EXIT_FAILURE);
   }
@@ -106,11 +117,9 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%s is already running!\n", PROG_NAME);
     return -EBUSY;
   }
-  
+
   /* Build new GFile from the commandline arg */
-  file = g_file_new_for_commandline_arg(device_str);
-
-
+  file = g_file_new_for_commandline_arg(CmdLine.device_arg);
   cancellable = g_cancellable_new();
 
   g_unix_signal_add(SIGTERM, quit_cb, NULL);
@@ -124,10 +133,9 @@ int main(int argc, char **argv) {
     But we could easily have different codepaths depending
     on the device used
   */
-  if (!create_qmi_client_connection (file, cancellable))
-        return EXIT_FAILURE;
+  if (!create_qmi_client_connection(file, cancellable))
+    return EXIT_FAILURE;
 
-  g_printerr("This should run after we connected\n");
   g_main_loop_run(loop);
   g_main_loop_unref(loop);
 

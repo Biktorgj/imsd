@@ -11,7 +11,6 @@
 #include <glib-unix.h>
 
 G_BEGIN_DECLS
-
 void get_autoconnect_settings();
 
 void cancel_connection_manager();

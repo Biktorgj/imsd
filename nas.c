@@ -21,15 +21,9 @@ typedef struct {
 static Context *ctx;
 
 typedef struct {
-    guint16 mcc;
-    guint16 mnc;
+  guint16 mcc;
+  guint16 mnc;
 } Carrier;
-
-typedef struct {
-    QmiClientNas *client;
-    gboolean enable; /* TRUE for enabling, FALSE for disabling */
-    gboolean system_info_checked;
-} UnsolicitedRegistrationEventsContext;
 
 static Carrier current_carrier;
 
@@ -50,16 +44,17 @@ static void get_home_network_ready(QmiClientNas *client, GAsyncResult *res) {
     qmi_message_nas_get_home_network_output_unref(output);
     return;
   }
-    guint16 mcc;
-    guint16 mnc;
-    const gchar *description;
+  guint16 mcc;
+  guint16 mnc;
+  const gchar *description;
 
-    qmi_message_nas_get_home_network_output_get_home_network(
-        output, &mcc, &mnc, &description, NULL);
+  qmi_message_nas_get_home_network_output_get_home_network(output, &mcc, &mnc,
+                                                           &description, NULL);
 
-    g_print("Home network: '%" G_GUINT16_FORMAT "'-'%" G_GUINT16_FORMAT "'\n",  mcc, mnc);
-    current_carrier.mcc = mcc;
-    current_carrier.mnc = mnc;
+  g_print("Home network: '%" G_GUINT16_FORMAT "'-'%" G_GUINT16_FORMAT "'\n",
+          mcc, mnc);
+  current_carrier.mcc = mcc;
+  current_carrier.mnc = mnc;
 
   qmi_message_nas_get_home_network_output_unref(output);
 }
@@ -81,8 +76,6 @@ void get_home_network() {
 
 */
 
-
-
 static void get_event_report_ready(QmiClientNas *client, GAsyncResult *res) {
   QmiMessageNasSetEventReportOutput *output;
   GError *error = NULL;
@@ -95,8 +88,6 @@ static void get_event_report_ready(QmiClientNas *client, GAsyncResult *res) {
   } else {
     g_printerr("The command went through!\n");
   }
-  
-  
 }
 void set_event_report() {
   g_info("Enabling event reporting for NAS: Test 1\n");
@@ -107,7 +98,8 @@ void set_event_report() {
 
 /* Indications */
 
-static void ri_serving_system_or_system_info_ready(QmiClientNas *client, GAsyncResult *res) {
+static void ri_serving_system_or_system_info_ready(QmiClientNas *client,
+                                                   GAsyncResult *res) {
   QmiMessageNasRegisterIndicationsOutput *output;
   GError *error = NULL;
   g_printerr("[%s] We have been called!\n", __func__);
@@ -119,28 +111,22 @@ static void ri_serving_system_or_system_info_ready(QmiClientNas *client, GAsyncR
   } else {
     g_printerr("The command went through!\n");
   }
-  
-  
 }
-
 
 void enable_nas_indications() {
   g_printerr("* Enabling NAS indications: Test 2\n");
-    g_autoptr(QmiMessageNasRegisterIndicationsInput)  input = NULL;
+  g_autoptr(QmiMessageNasRegisterIndicationsInput) input = NULL;
 
-    input = qmi_message_nas_register_indications_input_new ();
+  input = qmi_message_nas_register_indications_input_new();
 
-    qmi_message_nas_register_indications_input_set_serving_system_events (input, FALSE, NULL);
+  qmi_message_nas_register_indications_input_set_serving_system_events(
+      input, FALSE, NULL);
 
-    qmi_message_nas_register_indications_input_set_network_reject_information (input, ctx->enable, FALSE, NULL);
-    qmi_client_nas_register_indications (
-        ctx->client,
-        input,
-        5,
-        NULL,
-        (GAsyncReadyCallback)ri_serving_system_or_system_info_ready,
-        NULL);
-
+  qmi_message_nas_register_indications_input_set_network_reject_information(
+      input, ctx->enable, FALSE, NULL);
+  qmi_client_nas_register_indications(
+      ctx->client, input, 5, NULL,
+      (GAsyncReadyCallback)ri_serving_system_or_system_info_ready, NULL);
 }
 
 void nas_start(QmiDevice *device, QmiClientNas *client,
