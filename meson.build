@@ -47,5 +47,6 @@ executable('imsd',
   'qmi-ims-client.c',
   'wds.c',
   'nas.c',
+  'imsa.c',
   dependencies: deps,
 )

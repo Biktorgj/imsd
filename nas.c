@@ -60,37 +60,37 @@ static void get_home_network_ready(QmiClientNas *client, GAsyncResult *res) {
 }
 
 void get_home_network() {
-  g_info("Asynchronously getting home network...");
+  g_debug("Asynchronously getting home network...");
   qmi_client_nas_get_home_network(ctx->client, NULL, 10, ctx->cancellable,
                                   (GAsyncReadyCallback)get_home_network_ready,
                                   NULL);
   return;
 }
-/* EVENT REPORT TESTING: First attempt
+/* 
+  EVENT REPORT TESTING: First attempt
   So, we need to know if signal gets lost, recovered, or somethng fails
   in between. Then we need to get event reports from the NAS service.
   This is the first test to see if we can tell the baseband to inform us
   about those things. From there we can go on with the rest.
-
-
-
 */
 
 static void get_event_report_ready(QmiClientNas *client, GAsyncResult *res) {
   QmiMessageNasSetEventReportOutput *output;
   GError *error = NULL;
-  g_printerr("%s: We have been called!\n", __func__);
+  g_debug("%s: We have been called!\n", __func__);
   output = qmi_client_nas_set_event_report_finish(client, res, &error);
   if (!output) {
     g_printerr("error: operation failed: %s\n", error->message);
     g_error_free(error);
     return;
   } else {
-    g_printerr("The command went through!\n");
+    g_debug("%s The command went through!\n", __func__);
   }
 }
+
+
 void set_event_report() {
-  g_info("Enabling event reporting for NAS: Test 1\n");
+  g_debug("Enabling event reporting for NAS: Test 1\n");
   qmi_client_nas_set_event_report(ctx->client, NULL, 10, ctx->cancellable,
                                   (GAsyncReadyCallback)get_event_report_ready,
                                   NULL);
@@ -102,19 +102,19 @@ static void ri_serving_system_or_system_info_ready(QmiClientNas *client,
                                                    GAsyncResult *res) {
   QmiMessageNasRegisterIndicationsOutput *output;
   GError *error = NULL;
-  g_printerr("[%s] We have been called!\n", __func__);
+  g_debug("[%s] We have been called!\n", __func__);
   output = qmi_client_nas_register_indications_finish(client, res, &error);
   if (!output) {
     g_printerr("error: operation failed: %s\n", error->message);
     g_error_free(error);
     return;
   } else {
-    g_printerr("The command went through!\n");
+    g_debug("%s The command went through!\n", __func__);
   }
 }
 
 void enable_nas_indications() {
-  g_printerr("* Enabling NAS indications: Test 2\n");
+  g_debug("* Enabling NAS indications: Test 2\n");
   g_autoptr(QmiMessageNasRegisterIndicationsInput) input = NULL;
 
   input = qmi_message_nas_register_indications_input_new();

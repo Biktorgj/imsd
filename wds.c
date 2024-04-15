@@ -166,12 +166,12 @@ static void get_profile_list_ready(QmiClientWds *client, GAsyncResult *res) {
                                                            &profile_list, NULL);
 
   if (!profile_list || !profile_list->len) {
-    g_print("Profile list empty\n");
+    g_printerr("Profile list empty\n");
     qmi_message_wds_get_profile_list_output_unref(output);
     return;
   }
 
-  g_print("Profile list retrieved:\n");
+  g_debug("Profile list retrieved:\n");
 
   inner_ctx = g_slice_new(GetProfileListContext);
   inner_ctx->profile_list = g_array_ref(profile_list);
@@ -231,7 +231,7 @@ static void get_packet_service_status_ready(QmiClientWds *client,
   qmi_message_wds_get_packet_service_status_output_get_connection_status(
       output, &status, NULL);
 
-  g_print("[%s] Connection status: '%s'\n",
+  g_debug("[%s] Connection status: '%s'\n",
           qmi_device_get_path_display(ctx->device),
           qmi_wds_connection_status_get_string(status));
 

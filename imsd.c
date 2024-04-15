@@ -83,7 +83,7 @@ static gboolean quit_cb(gpointer user_data) {
 int main(int argc, char **argv) {
   int lockfile;
   fprintf(stdout, "IMS Daemon %s \n", RELEASE_VER);
-  GFile *file;
+  GFile *device_path;
   GOptionContext *context;
   GError *error = NULL;
 
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
   }
 
   /* Build new GFile from the commandline arg */
-  file = g_file_new_for_commandline_arg(CmdLine.device_arg);
+  device_path = g_file_new_for_commandline_arg(CmdLine.device_arg);
   cancellable = g_cancellable_new();
 
   g_unix_signal_add(SIGTERM, quit_cb, NULL);
@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
     But we could easily have different codepaths depending
     on the device used
   */
-  if (!create_qmi_client_connection(file, cancellable))
+  if (!create_qmi_client_connection(device_path, cancellable))
     return EXIT_FAILURE;
 
   g_main_loop_run(loop);
@@ -143,6 +143,7 @@ int main(int argc, char **argv) {
     g_object_unref(cancellable);
   close(lockfile);
   unlink(LOCK_FILE);
+  
   g_printerr("bye bye!\n");
   return 0;
 }
