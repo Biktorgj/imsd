@@ -20,12 +20,11 @@ typedef struct {
 
 static Context *ctx;
 
-typedef struct {
-  guint16 mcc;
-  guint16 mnc;
-} Carrier;
-
 static Carrier current_carrier;
+
+Carrier get_carrier_data() {
+  return current_carrier;
+}
 
 static void get_home_network_ready(QmiClientNas *client, GAsyncResult *res) {
   QmiMessageNasGetHomeNetworkOutput *output;

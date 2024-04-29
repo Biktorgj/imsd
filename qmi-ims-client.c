@@ -3,9 +3,9 @@
  * Copyright (c) 2024, Biktorgj
  */
 #include "qmi-ims-client.h"
+#include "imsa.h"
 #include "nas.h"
 #include "wds.h"
-#include "imsa.h"
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <glib.h>
@@ -34,36 +34,34 @@ typedef struct {
 } Context;
 static Context *ctx;
 
-typedef struct _IMSD_runcfg{
+typedef struct _IMSD_runcfg {
   gboolean status;
-  guint mcc;
-  guint mnc;
+  Carrier carrier_data;
   guint apn_status;
   gchar *curr_apn;
-  gboolean wds_ready;
-  gboolean nas_ready;
-  gboolean imss_ready;
-  gboolean imsa_ready;
+  guint wds_ready;
+  guint nas_ready;
+  guint imss_ready;
+  guint imsa_ready;
+  guint imsp_ready;
+  guint imsrtp_ready;
+  gboolean is_initialized;
   gboolean exit_requested;
 } IMSD_runtime;
 
 static IMSD_runtime *runtime;
-void stupid_loop() {
-  while (1) {
-    g_printerr("Stupid loop!\n");
-    
-    sleep(5);
-  }
-}
+
 /* Helpers to (de) allocate services */
 
 static gboolean close_device(gpointer userdata);
+gboolean wait_for_init(void *data);
 
 void cancel_connection_manager() {
   g_printerr("Stopping connmanager\n");
+  wds_do_stop_network(TRUE);
   release_clients();
   /* What an ugly hack :) */
-  g_timeout_add (0, close_device, NULL);
+  g_timeout_add(0, close_device, NULL);
 }
 
 static void close_ready(QmiDevice *dev, GAsyncResult *res) {
@@ -94,7 +92,8 @@ static gboolean close_device(gpointer userdata) {
     if (ctx->imsrtp)
       g_printerr("IMSRTP still allocated\n");
     sleep(1);
-  } while (ctx->wds || ctx->nas || ctx->imss || ctx->imsa || ctx->imsp || ctx->imsrtp);
+  } while (ctx->wds || ctx->nas || ctx->imss || ctx->imsa || ctx->imsp ||
+           ctx->imsrtp);
 
   g_printerr("Closing device\n");
   qmi_device_close_async(ctx->device, 1, NULL, (GAsyncReadyCallback)close_ready,
@@ -213,11 +212,13 @@ static void wds_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
   ctx->wds = qmi_device_allocate_client_finish(dev, res, &error);
   if (!ctx->wds) {
+    runtime->wds_ready = IMS_INIT_ERR;
+
     g_printerr("error: couldn't create client for the WDSS service: %s\n",
                error->message);
     exit(EXIT_FAILURE);
   }
-  runtime->wds_ready = 1;
+  runtime->wds_ready = IMS_INIT_OK;
   g_printerr("WDS Allocated!\n");
   wds_start(dev, QMI_CLIENT_WDS(ctx->wds), ctx->cancellable);
 }
@@ -226,10 +227,13 @@ static void imss_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
   ctx->imss = qmi_device_allocate_client_finish(dev, res, &error);
   if (!ctx->imss) {
+    runtime->imss_ready = IMS_INIT_ERR;
+
     g_printerr("error: couldn't create client for the IMSS service: %s\n",
                error->message);
     exit(EXIT_FAILURE);
   }
+  runtime->imss_ready = IMS_INIT_OK;
   g_printerr("IMSS Allocated!\n");
 }
 
@@ -237,11 +241,14 @@ static void imsp_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
   ctx->imsp = qmi_device_allocate_client_finish(dev, res, &error);
   if (!ctx->imsp) {
+    runtime->imsp_ready = IMS_INIT_ERR;
+
     g_printerr(
         "error: couldn't create client for the IMS Presenece service: %s\n",
         error->message);
     return;
   }
+  runtime->imsp_ready = IMS_INIT_OK;
   g_printerr("IMS Presence Allocated!\n");
 }
 
@@ -249,10 +256,12 @@ static void imsrtp_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
   ctx->imsrtp = qmi_device_allocate_client_finish(dev, res, &error);
   if (!ctx->imsrtp) {
+    runtime->imsrtp_ready = IMS_INIT_ERR;
     g_printerr("error: couldn't create client for the IMS RTP service: %s\n",
                error->message);
     return;
   }
+  runtime->imsrtp_ready = IMS_INIT_OK;
   g_printerr("IMS RTP Allocated!\n");
 }
 
@@ -260,30 +269,35 @@ static void nas_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
   ctx->nas = qmi_device_allocate_client_finish(dev, res, &error);
   if (!ctx->nas) {
+    runtime->nas_ready = IMS_INIT_ERR;
+
     g_printerr("error: couldn't create client for the NAS service: %s\n",
                error->message);
     exit(EXIT_FAILURE);
   }
   g_printerr("NAS Allocated!\n");
-  runtime->nas_ready = 1;
+  runtime->nas_ready = IMS_INIT_OK;
   nas_start(dev, QMI_CLIENT_NAS(ctx->nas), ctx->cancellable);
 }
-
-
 
 static void imsa_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
   ctx->imsa = qmi_device_allocate_client_finish(dev, res, &error);
   if (!ctx->imsa) {
+    runtime->imsa_ready = IMS_INIT_ERR;
+
     g_printerr("error: couldn't create client for the IMSA service: %s\n",
                error->message);
     exit(EXIT_FAILURE);
   }
   g_printerr("IMSA Allocated!\n");
-  runtime->imsa_ready = 1;
+  runtime->imsa_ready = IMS_INIT_OK;
   imsa_start(dev, QMI_CLIENT_IMSA(ctx->imsa), ctx->cancellable);
 }
 
+/* Allocate clients for all of our services
+   We will finish when the callback is triggered from libqmi
+*/
 static void device_open_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
 
@@ -319,6 +333,38 @@ static void device_open_ready(QmiDevice *dev, GAsyncResult *res) {
       (GAsyncReadyCallback)imsrtp_allocate_client_ready, NULL);
 }
 
+gboolean wait_for_init(void *data) {
+  runtime->carrier_data = get_carrier_data();
+  g_printerr("%s\n * Client allocation status:\n", __func__);
+  g_printerr("\t - WDS: %i \n", runtime->wds_ready);
+  g_printerr("\t - NAS: %i\n", runtime->nas_ready);
+  g_printerr("\t - IMSS: %i\n", runtime->imss_ready);
+  g_printerr("\t - IMSA: %i\n", runtime->imsa_ready);
+  g_printerr("\t - IMSP: %i\n", runtime->imsp_ready);
+  g_printerr("\t - IMS RTP: %i\n", runtime->imsrtp_ready);
+  g_printerr(" * Network:\n");
+  g_printerr("\t - MCC: %i\n", runtime->carrier_data.mcc);
+  g_printerr("\t - MNC: %i\n", runtime->carrier_data.mnc);
+  /*
+  IMSRTP needs to be explicitly told to start with a subscription ID
+  Me thinks I first need to make sure IMSA / IMSS has everything it needs
+  Then I can trigger IMS RTP to start
+  */
+  if (runtime->wds_ready == IMS_INIT_OK &&
+      runtime->nas_ready == IMS_INIT_OK &&
+      runtime->imss_ready == IMS_INIT_OK &&
+      runtime->imsa_ready == IMS_INIT_OK &&
+      runtime->imsp_ready == IMS_INIT_OK &&
+      runtime->imsrtp_ready == IMS_INIT_OK) {
+        // We can let go, everything is setup
+        runtime->is_initialized = TRUE;
+        return FALSE;
+      }
+
+  return TRUE;
+  // false to break the timer
+}
+/* QMI over node or qrtr */
 static void qmi_device_ready(GObject *unused, GAsyncResult *res) {
   QmiDeviceOpenFlags open_flags = QMI_DEVICE_OPEN_FLAGS_NONE;
   GError *error = NULL;
@@ -336,6 +382,7 @@ static void qmi_device_ready(GObject *unused, GAsyncResult *res) {
                   (GAsyncReadyCallback)device_open_ready, NULL);
 }
 
+/* QRTR only */
 static void bus_new_callback(GObject *source, GAsyncResult *res,
                              gpointer user_data) {
   g_autoptr(GError) error = NULL;
@@ -361,8 +408,9 @@ static void bus_new_callback(GObject *source, GAsyncResult *res,
 }
 
 /* Entry point here:
-  We just connect either via device node or qrtr
-
+  We just connect either via device node or qrtr, then
+  we delegate to libqmi the process of registering to each
+  service.
 */
 gboolean create_qmi_client_connection(GFile *file, GCancellable *cancellable) {
   g_autofree gchar *fd = NULL;
@@ -370,6 +418,7 @@ gboolean create_qmi_client_connection(GFile *file, GCancellable *cancellable) {
   runtime = g_slice_new(IMSD_runtime);
   ctx->cancellable = g_object_ref(cancellable);
   fd = g_file_get_path(file);
+  g_timeout_add_seconds(10, wait_for_init, runtime);
   if (fd) {
     g_info("Connecting via device node");
     qmi_device_new(file, ctx->cancellable,

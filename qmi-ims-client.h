@@ -11,6 +11,34 @@
 #include <glib-unix.h>
 
 G_BEGIN_DECLS
+typedef struct {
+  guint16 mcc;
+  guint16 mnc;
+} Carrier;
+
+enum qmi_ims_service_errors {
+    IMS_OPER_NOERR = 0x00000000,
+    IMS_OPER_NOT_READY = 0x00000001,
+    IMS_OPER_NOT_AVAIL = 0x00000002,
+    IMS_OPER_READ_FAIL = 0x00000003,
+    IMS_OPER_WRITE_FAIL = 0x00000004,
+    IMS_OPER_ERR_UNKNOWN = 0x00000005
+};
+
+enum qmi_ims_subscription_type {
+    IMS_SUB_NONE = 0xFFFFFFFF,
+    IMS_SUB_PRI = 0x00000000,
+    IMS_SUB_SEC = 0x00000001,
+    IMS_SUB_TER = 0x00000002
+};
+
+enum initialization_state {
+    IMS_INIT_PENDING = 0,
+    IMS_INIT_OK = 1,
+    IMS_INIT_ERR = 2
+};
+
+Carrier get_carrier_data();
 void get_autoconnect_settings();
 
 void cancel_connection_manager();

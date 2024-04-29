@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2024, Biktorgj
  */
+#include "wds.h"
 #include "qmi-ims-client.h"
 #include <gio/gio.h>
 #include <glib-unix.h>
@@ -9,14 +10,18 @@
 #include <glib/gprintf.h>
 #include <libqmi-glib.h>
 #include <libqrtr-glib.h>
-
 #define VALIDATE_MASK_NONE(str) (str ? str : "none")
+#define QMI_WDS_IP_FAMILY_IPV4 4
 
 /* Context */
 typedef struct {
   QmiDevice *device;
   QmiClientWds *client;
   GCancellable *cancellable;
+  gulong network_started_id;
+  guint packet_status_timeout_id;
+  guint32 packet_data_handle;
+
 } Context;
 static Context *ctx;
 
@@ -204,8 +209,6 @@ void get_profile_list(gchar *get_profile_list_str) {
 }
 /************ PROFILES *************/
 
-/**** EXAMPLES ************/
-
 static void get_packet_service_status_ready(QmiClientWds *client,
                                             GAsyncResult *res) {
   GError *error = NULL;
@@ -287,8 +290,191 @@ void get_autoconnect_settings() {
       (GAsyncReadyCallback)get_autoconnect_settings_ready, NULL);
 }
 
-/**** EXAMPLES ************/
+/*
+ * STOP / START NETWORK
+ *
+ *
+ *
+ *
+ *
+ */
 
+static void start_network_ready(QmiClientWds *client, GAsyncResult *res) {
+  GError *error = NULL;
+  QmiMessageWdsStartNetworkOutput *output;
+
+  output = qmi_client_wds_start_network_finish(client, res, &error);
+  if (!output) {
+    g_printerr("error: operation failed: %s\n", error->message);
+    g_error_free(error);
+    return;
+  }
+
+  if (!qmi_message_wds_start_network_output_get_result(output, &error)) {
+    g_printerr("error: couldn't start network: %s\n", error->message);
+    if (g_error_matches(error, QMI_PROTOCOL_ERROR,
+                        QMI_PROTOCOL_ERROR_CALL_FAILED)) {
+      QmiWdsCallEndReason cer;
+      QmiWdsVerboseCallEndReasonType verbose_cer_type;
+      gint16 verbose_cer_reason;
+
+      if (qmi_message_wds_start_network_output_get_call_end_reason(output, &cer,
+                                                                   NULL))
+        g_printerr("call end reason (%u): %s\n", cer,
+                   qmi_wds_call_end_reason_get_string(cer));
+
+      if (qmi_message_wds_start_network_output_get_verbose_call_end_reason(
+              output, &verbose_cer_type, &verbose_cer_reason, NULL))
+        g_printerr(
+            "verbose call end reason (%u,%d): [%s] %s\n", verbose_cer_type,
+            verbose_cer_reason,
+            qmi_wds_verbose_call_end_reason_type_get_string(verbose_cer_type),
+            qmi_wds_verbose_call_end_reason_get_string(verbose_cer_type,
+                                                       verbose_cer_reason));
+    }
+
+    g_error_free(error);
+    qmi_message_wds_start_network_output_unref(output);
+    return;
+  }
+
+  qmi_message_wds_start_network_output_get_packet_data_handle(
+      output, &ctx->packet_data_handle, NULL);
+  qmi_message_wds_start_network_output_unref(output);
+
+  g_print("[%s] Network started, handle: '%u'\n",
+          qmi_device_get_path_display(ctx->device),
+          (guint)ctx->packet_data_handle);
+}
+
+static void stop_network_ready(QmiClientWds *client, GAsyncResult *res) {
+  GError *error = NULL;
+  QmiMessageWdsStopNetworkOutput *output;
+
+  output = qmi_client_wds_stop_network_finish(client, res, &error);
+  if (!output) {
+    g_printerr("error: operation failed: %s\n", error->message);
+    g_error_free(error);
+    return;
+  }
+
+  if (!qmi_message_wds_stop_network_output_get_result(output, &error)) {
+    g_printerr("error: couldn't stop network: %s\n", error->message);
+    g_error_free(error);
+    qmi_message_wds_stop_network_output_unref(output);
+    return;
+  }
+
+  g_print("[%s] Network stopped\n", qmi_device_get_path_display(ctx->device));
+  qmi_message_wds_stop_network_output_unref(output);
+}
+
+void wds_do_stop_network(gboolean disable_autoconnect) {
+  QmiMessageWdsStopNetworkInput *input;
+  g_info("*** STOP NETWORK!!!\n");
+  input = qmi_message_wds_stop_network_input_new();
+  qmi_message_wds_stop_network_input_set_packet_data_handle(
+      input, ctx->packet_data_handle, NULL);
+  if (disable_autoconnect)
+    qmi_message_wds_stop_network_input_set_disable_autoconnect(input, TRUE,
+                                                               NULL);
+
+  g_print("Network cancelled... releasing resources\n");
+  qmi_client_wds_stop_network(ctx->client, input, 120, ctx->cancellable,
+                              (GAsyncReadyCallback)stop_network_ready, NULL);
+  qmi_message_wds_stop_network_input_unref(input);
+}
+
+void wds_start_network() {
+  QmiMessageWdsStartNetworkInput *input = NULL;
+  GError *error = NULL;
+  g_info("**** START NETWORK!!\n");
+  input = qmi_message_wds_start_network_input_new();
+  qmi_message_wds_start_network_input_set_apn(input, "ims", NULL);
+  qmi_message_wds_start_network_input_set_profile_index_3gpp(input, 3, NULL);
+  qmi_message_wds_start_network_input_set_ip_family_preference(
+      input, QMI_WDS_IP_FAMILY_IPV4, NULL);
+  qmi_message_wds_start_network_input_set_enable_autoconnect(input, TRUE, NULL);
+  g_debug("Asynchronously starting network...");
+  qmi_client_wds_start_network(ctx->client, input, 180, ctx->cancellable,
+                               (GAsyncReadyCallback)start_network_ready, NULL);
+  if (input)
+    qmi_message_wds_start_network_input_unref(input);
+}
+/*
+ * Add a new profile
+ *
+ *
+ */
+
+static void modify_profile_ready(QmiClientWds *client, GAsyncResult *res) {
+  QmiMessageWdsModifyProfileOutput *output;
+  GError *error = NULL;
+
+  output = qmi_client_wds_modify_profile_finish(client, res, &error);
+  if (!output) {
+    g_printerr("error: operation failed: %s\n", error->message);
+    g_error_free(error);
+    return;
+  }
+
+  if (!qmi_message_wds_modify_profile_output_get_result(output, &error)) {
+    QmiWdsDsProfileError ds_profile_error;
+
+    if (g_error_matches(error, QMI_PROTOCOL_ERROR,
+                        QMI_PROTOCOL_ERROR_EXTENDED_INTERNAL) &&
+        qmi_message_wds_modify_profile_output_get_extended_error_code(
+            output, &ds_profile_error, NULL)) {
+      g_printerr("error: couldn't modify profile: ds profile error: %s\n",
+                 qmi_wds_ds_profile_error_get_string(ds_profile_error));
+    } else {
+      g_printerr("error: couldn't modify profile: %s\n", error->message);
+    }
+    g_error_free(error);
+    qmi_message_wds_modify_profile_output_unref(output);
+    return;
+  }
+  qmi_message_wds_modify_profile_output_unref(output);
+  g_print("Profile successfully modified.\n");
+}
+
+void add_new_profile() {
+  QmiMessageWdsModifyProfileInput *input = NULL;
+  g_info("Attempting to create a IMS Profile\n");
+  input = qmi_message_wds_modify_profile_input_new();
+  GError *error = NULL;
+  /* We're going to hardcode the fuck out of this for now */
+  qmi_message_wds_modify_profile_input_set_profile_identifier(
+      input, PROFILE_TYPE_3GPP, 1, NULL);
+
+  qmi_message_wds_create_profile_input_set_profile_type(input, 0, NULL);
+  qmi_message_wds_create_profile_input_set_pdp_context_number(input, 1, NULL);
+  qmi_message_wds_create_profile_input_set_pdp_type(input, PDP_TYPE_IPV4V6,
+                                                    NULL);
+  qmi_message_wds_create_profile_input_set_apn_type_mask(
+      input, APN_TYPE_MASK_IMS, NULL);
+  qmi_message_wds_create_profile_input_set_profile_name(input, "ims", NULL);
+  qmi_message_wds_create_profile_input_set_apn_name(input, "ims", NULL);
+  qmi_message_wds_create_profile_input_set_authentication(input, 0, NULL);
+  //  qmi_message_wds_create_profile_input_set_username (input, props.username,
+  //  NULL); qmi_message_wds_create_profile_input_set_password (input,
+  //  props.password, NULL);
+  qmi_message_wds_create_profile_input_set_roaming_disallowed_flag(input, 0,
+                                                                   NULL);
+  //  qmi_message_wds_create_profile_input_set_apn_disabled_flag (input,
+  //  props.disabled, NULL);
+
+  qmi_client_wds_modify_profile(ctx->client, input, 10, ctx->cancellable,
+                                (GAsyncReadyCallback)modify_profile_ready,
+                                NULL);
+  qmi_message_wds_modify_profile_input_unref(input);
+  return;
+}
+/*
+ * Hooks to the qmi client
+ *
+ *
+ */
 void wds_start(QmiDevice *device, QmiClientWds *client,
                GCancellable *cancellable) {
 
@@ -297,7 +483,12 @@ void wds_start(QmiDevice *device, QmiClientWds *client,
   ctx->device = g_object_ref(device);
   ctx->client = g_object_ref(client);
   ctx->cancellable = g_object_ref(cancellable);
-  get_autoconnect_settings();
+  ctx->packet_data_handle = 0xFFFFFFFF;
+  add_new_profile();
+  // Just to give me time to read
+  sleep(5);
+  //  get_autoconnect_settings();
   get_pkt_svc_status();
   get_profile_list("3gpp");
+  wds_start_network();
 }
