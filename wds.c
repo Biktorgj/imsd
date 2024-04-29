@@ -447,22 +447,20 @@ void add_new_profile() {
   qmi_message_wds_modify_profile_input_set_profile_identifier(
       input, PROFILE_TYPE_3GPP, 1, NULL);
 
-  qmi_message_wds_create_profile_input_set_profile_type(input, 0, NULL);
-  qmi_message_wds_create_profile_input_set_pdp_context_number(input, 1, NULL);
-  qmi_message_wds_create_profile_input_set_pdp_type(input, PDP_TYPE_IPV4V6,
+//  qmi_message_wds_modify_profile_input_set_profile_type(input, 0, NULL);
+  qmi_message_wds_modify_profile_input_set_pdp_context_number(input, 1, NULL);
+  qmi_message_wds_modify_profile_input_set_pdp_type(input, PDP_TYPE_IPV4V6,
                                                     NULL);
-  qmi_message_wds_create_profile_input_set_apn_type_mask(
+  qmi_message_wds_modify_profile_input_set_apn_type_mask(
       input, APN_TYPE_MASK_IMS, NULL);
-  qmi_message_wds_create_profile_input_set_profile_name(input, "ims", NULL);
-  qmi_message_wds_create_profile_input_set_apn_name(input, "ims", NULL);
-  qmi_message_wds_create_profile_input_set_authentication(input, 0, NULL);
-  //  qmi_message_wds_create_profile_input_set_username (input, props.username,
-  //  NULL); qmi_message_wds_create_profile_input_set_password (input,
-  //  props.password, NULL);
-  qmi_message_wds_create_profile_input_set_roaming_disallowed_flag(input, 0,
+  qmi_message_wds_modify_profile_input_set_profile_name(input, "ims", NULL);
+  qmi_message_wds_modify_profile_input_set_apn_name(input, "ims", NULL);
+  qmi_message_wds_modify_profile_input_set_authentication(input, 0, NULL);
+  qmi_message_wds_modify_profile_input_set_username (input, "", NULL); 
+  qmi_message_wds_modify_profile_input_set_password (input, "" , NULL);
+  qmi_message_wds_modify_profile_input_set_roaming_disallowed_flag(input, 0,
                                                                    NULL);
-  //  qmi_message_wds_create_profile_input_set_apn_disabled_flag (input,
-  //  props.disabled, NULL);
+  qmi_message_wds_modify_profile_input_set_apn_disabled_flag (input, 0 , NULL);
 
   qmi_client_wds_modify_profile(ctx->client, input, 10, ctx->cancellable,
                                 (GAsyncReadyCallback)modify_profile_ready,

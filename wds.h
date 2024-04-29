@@ -13,8 +13,8 @@
 
 G_BEGIN_DECLS
 enum {
-    PROFILE_TYPE_3GPP = 0,
-    PROFILE_TYPE_3GPP2 = 1,
+    PROFILE_TYPE_3GPP = 1,
+    PROFILE_TYPE_3GPP2 = 0,
 };
 
 enum {
