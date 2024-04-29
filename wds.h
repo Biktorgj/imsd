@@ -39,6 +39,26 @@ enum {
     APN_TYPE_MASK_EMERG = 0x200
 };
 
+/* Connection states */
+enum {
+ WDS_CONNECTION_STATE_NONE = 0,
+ WDS_CONNECTION_STATE_PROFILE_READY, // async
+ WDS_CONNECTION_STATE_SETUP_DATA_FORMAT, // Multiplexing, async
+ WDS_CONNECTION_STATE_SETUP_LINK, // sync
+ WDS_CONNECTION_STATE_LINK_BRINGUP, // to actually turn on the netif, sync
+ WDS_CONNECTION_STATE_SET_IP_BEARER_METHOD, // Ipv4? 6? Both? Depends on profile config
+ WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV4, // Bind mux the data port, async
+ WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV4, // async
+ WDS_CONNECTION_STATE_DO_START_NETWORK_IPV4, // client_wds_start_network, async
+ WDS_CONNECTION_STATE_REGISTER_WDS_INDICATIONS_IPV4, // If network started, we need to know if our packet handler dropped
+ WDS_CONNECTION_STATE_GET_SETTINGS_IPV4, // Unsure if I need this
+ WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV6, // Bind mux the data port, async
+ WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV6, // async
+ WDS_CONNECTION_STATE_DO_START_NETWORK_IPV6,
+ WDS_CONNECTION_STATE_ENABLE_INDICATIONS_IPV6,
+ WDS_CONNECTION_STATE_GET_SETTINGS_IPV6
+};
+
 void wds_do_stop_network (gboolean disable_autoconnect);
 void wds_start(QmiDevice *device,
                 QmiClientWds *client,

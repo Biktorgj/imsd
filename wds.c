@@ -21,7 +21,7 @@ typedef struct {
   gulong network_started_id;
   guint packet_status_timeout_id;
   guint32 packet_data_handle;
-
+  guint8 connection_readiness_step;
 } Context;
 static Context *ctx;
 
@@ -401,10 +401,13 @@ void wds_start_network() {
   if (input)
     qmi_message_wds_start_network_input_unref(input);
 }
+
+
 /*
- * Add a new profile
- *
- *
+ * Modify the first profile, which seems to be empty all the time
+ * Maybe a better approach would be to find the first empty slot
+ * first, then add or modify. But I'm not worrying about that 
+ * for now. 
  */
 
 static void modify_profile_ready(QmiClientWds *client, GAsyncResult *res) {
@@ -467,6 +470,15 @@ void add_new_profile() {
                                 NULL);
   qmi_message_wds_modify_profile_input_unref(input);
   return;
+}
+
+void get_wds_ready_to_connect() {
+  switch (ctx->connection_readiness_step) {
+
+    default: 
+      g_info("We hit the default case\n");
+      break;
+  }
 }
 /*
  * Hooks to the qmi client
