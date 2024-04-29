@@ -387,7 +387,6 @@ void wds_do_stop_network(gboolean disable_autoconnect) {
 
 void wds_start_network() {
   QmiMessageWdsStartNetworkInput *input = NULL;
-  GError *error = NULL;
   g_info("**** START NETWORK!!\n");
   input = qmi_message_wds_start_network_input_new();
   qmi_message_wds_start_network_input_set_apn(input, "ims", NULL);
@@ -445,7 +444,6 @@ void add_new_profile() {
   QmiMessageWdsModifyProfileInput *input = NULL;
   g_info("Attempting to create a IMS Profile\n");
   input = qmi_message_wds_modify_profile_input_new();
-  GError *error = NULL;
   /* We're going to hardcode the fuck out of this for now */
   qmi_message_wds_modify_profile_input_set_profile_identifier(
       input, PROFILE_TYPE_3GPP, 1, NULL);

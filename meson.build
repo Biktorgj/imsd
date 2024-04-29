@@ -48,5 +48,6 @@ executable('imsd',
   'wds.c',
   'nas.c',
   'imsa.c',
+  'imss.c',
   dependencies: deps,
 )

@@ -3,6 +3,7 @@
  * Copyright (c) 2024, Biktorgj
  */
 #include "qmi-ims-client.h"
+#include "imss.h"
 #include "imsa.h"
 #include "nas.h"
 #include "wds.h"
@@ -235,6 +236,7 @@ static void imss_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   }
   runtime->imss_ready = IMS_INIT_OK;
   g_printerr("IMSS Allocated!\n");
+  imss_start(dev, QMI_CLIENT_IMS(ctx->imss), ctx->cancellable);
 }
 
 static void imsp_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
