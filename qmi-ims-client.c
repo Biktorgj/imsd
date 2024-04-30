@@ -229,7 +229,6 @@ static void imss_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   ctx->imss = qmi_device_allocate_client_finish(dev, res, &error);
   if (!ctx->imss) {
     runtime->imss_ready = IMS_INIT_ERR;
-
     g_printerr("error: couldn't create client for the IMSS service: %s\n",
                error->message);
     exit(EXIT_FAILURE);
@@ -335,6 +334,7 @@ static void device_open_ready(QmiDevice *dev, GAsyncResult *res) {
       (GAsyncReadyCallback)imsrtp_allocate_client_ready, NULL);
 }
 
+
 gboolean wait_for_init(void *data) {
   runtime->carrier_data = get_carrier_data();
   g_printerr("%s\n * Client allocation status:\n", __func__);
@@ -349,8 +349,9 @@ gboolean wait_for_init(void *data) {
   g_printerr("\t - MNC: %i\n", runtime->carrier_data.mnc);
   /*
   IMSRTP needs to be explicitly told to start with a subscription ID
-  Me thinks I first need to make sure IMSA / IMSS has everything it needs
-  Then I can trigger IMS RTP to start
+  Me thought wrong. First I need to bring up the network, tell it
+  the handler, and then I should be able to bring up rtp and presence.
+
   */
   if (runtime->wds_ready == IMS_INIT_OK &&
       runtime->nas_ready == IMS_INIT_OK &&
