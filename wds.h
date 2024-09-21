@@ -51,6 +51,7 @@ enum {
  WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV4, // Bind mux the data port, async
  WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV4, // async
  WDS_CONNECTION_STATE_DO_START_NETWORK_IPV4, // client_wds_start_network, async
+ WDS_CONNECTION_STATE_WAIT_FOR_COMPLETION_NET_START_IPV4,
  WDS_CONNECTION_STATE_REGISTER_WDS_INDICATIONS_IPV4, // If network started, we need to know if our packet handler dropped
  WDS_CONNECTION_STATE_GET_SETTINGS_IPV4, // Unsure if I need this
  WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV6, // Bind mux the data port, async

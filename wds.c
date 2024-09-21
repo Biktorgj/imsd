@@ -21,8 +21,19 @@ typedef struct {
   guint8 profile_id;
   gulong network_started_id;
   guint packet_status_timeout_id;
+  // Handler to start and stop network
   guint32 packet_data_handle;
+  // WDS network bringup step
   guint8 connection_readiness_step;
+  // Mux ID and device in netlink
+  // We should clean this up when we quit or we crash
+  // **without** interfering with ModemManager...
+  gchar *link_name;
+  guint mux_id;
+  // Endpoint
+  guint endpoint_type;
+  guint endpoint_ifnum;
+
 } Context;
 static Context *ctx;
 
@@ -44,7 +55,7 @@ static void get_profile_settings_ready(QmiClientWds *client, GAsyncResult *res,
                            QmiMessageWdsGetProfileListOutputProfileListProfile,
                            inner_ctx->i);
   GError *error = NULL;
-  g_printerr("%s: Profile %i\n",__func__, profile->profile_index);
+  g_printerr("%s: Profile %i\n", __func__, profile->profile_index);
 
   output = qmi_client_wds_get_profile_settings_finish(client, res, &error);
   if (!output) {
@@ -127,11 +138,12 @@ static void get_next_profile_settings(GetProfileListContext *inner_ctx) {
 
   if (inner_ctx->i >= inner_ctx->profile_list->len) {
     /* All done */
-    g_array_unref(inner_ctx->profile_list);
-    g_slice_free(GetProfileListContext, inner_ctx);
+    g_print("We reached the end of the profiles\n");
     if (ctx->profile_id == 0) {
       ctx->connection_readiness_step = WDS_CONNECTION_FIND_PROFILE_ADD_MODIFY;
     }
+    g_array_unref(inner_ctx->profile_list);
+    g_slice_free(GetProfileListContext, inner_ctx);
     return;
   }
 
@@ -197,7 +209,6 @@ static void get_profile_list_ready(QmiClientWds *client, GAsyncResult *res) {
   inner_ctx->profile_list = g_array_ref(profile_list);
   inner_ctx->i = 0;
   get_next_profile_settings(inner_ctx);
-
 }
 
 void get_profile_list(gchar *get_profile_list_str) {
@@ -323,6 +334,7 @@ static void start_network_ready(QmiClientWds *client, GAsyncResult *res) {
   if (!output) {
     g_printerr("error: operation failed: %s\n", error->message);
     g_error_free(error);
+    ctx->connection_readiness_step--;
     return;
   }
 
@@ -351,6 +363,7 @@ static void start_network_ready(QmiClientWds *client, GAsyncResult *res) {
 
     g_error_free(error);
     qmi_message_wds_start_network_output_unref(output);
+    ctx->connection_readiness_step++;
     return;
   }
 
@@ -361,6 +374,7 @@ static void start_network_ready(QmiClientWds *client, GAsyncResult *res) {
   g_print("[%s] Network started, handle: '%u'\n",
           qmi_device_get_path_display(ctx->device),
           (guint)ctx->packet_data_handle);
+  ctx->connection_readiness_step++;
 }
 
 static void stop_network_ready(QmiClientWds *client, GAsyncResult *res) {
@@ -406,23 +420,25 @@ void wds_start_network() {
   g_info("**** START NETWORK!!\n");
   input = qmi_message_wds_start_network_input_new();
   qmi_message_wds_start_network_input_set_apn(input, "ims", NULL);
-  qmi_message_wds_start_network_input_set_profile_index_3gpp(input, 3, NULL);
+  qmi_message_wds_start_network_input_set_profile_index_3gpp(
+      input, ctx->profile_id, NULL);
   qmi_message_wds_start_network_input_set_ip_family_preference(
       input, QMI_WDS_IP_FAMILY_IPV4, NULL);
-  qmi_message_wds_start_network_input_set_enable_autoconnect(input, TRUE, NULL);
+//  qmi_message_wds_start_network_input_set_enable_autoconnect(input, TRUE, NULL);
   g_debug("Asynchronously starting network...");
   qmi_client_wds_start_network(ctx->client, input, 180, ctx->cancellable,
                                (GAsyncReadyCallback)start_network_ready, NULL);
   if (input)
     qmi_message_wds_start_network_input_unref(input);
-}
 
+  ctx->connection_readiness_step++;
+}
 
 /*
  * Modify the first profile, which seems to be empty all the time
  * Maybe a better approach would be to find the first empty slot
- * first, then add or modify. But I'm not worrying about that 
- * for now. 
+ * first, then add or modify. But I'm not worrying about that
+ * for now.
  */
 
 static void modify_profile_ready(QmiClientWds *client, GAsyncResult *res) {
@@ -464,8 +480,9 @@ void modify_profile_by_id(guint8 profile_id) {
   qmi_message_wds_modify_profile_input_set_profile_identifier(
       input, PROFILE_TYPE_3GPP, 1, NULL);
 
-//  qmi_message_wds_modify_profile_input_set_profile_type(input, 0, NULL);
-  qmi_message_wds_modify_profile_input_set_pdp_context_number(input, profile_id, NULL);
+  //  qmi_message_wds_modify_profile_input_set_profile_type(input, 0, NULL);
+  qmi_message_wds_modify_profile_input_set_pdp_context_number(input, profile_id,
+                                                              NULL);
   qmi_message_wds_modify_profile_input_set_pdp_type(input, PDP_TYPE_IPV4V6,
                                                     NULL);
   qmi_message_wds_modify_profile_input_set_apn_type_mask(
@@ -473,11 +490,11 @@ void modify_profile_by_id(guint8 profile_id) {
   qmi_message_wds_modify_profile_input_set_profile_name(input, "ims", NULL);
   qmi_message_wds_modify_profile_input_set_apn_name(input, "ims", NULL);
   qmi_message_wds_modify_profile_input_set_authentication(input, 0, NULL);
-  qmi_message_wds_modify_profile_input_set_username (input, "", NULL); 
-  qmi_message_wds_modify_profile_input_set_password (input, "" , NULL);
+  qmi_message_wds_modify_profile_input_set_username(input, "", NULL);
+  qmi_message_wds_modify_profile_input_set_password(input, "", NULL);
   qmi_message_wds_modify_profile_input_set_roaming_disallowed_flag(input, 0,
                                                                    NULL);
-  qmi_message_wds_modify_profile_input_set_apn_disabled_flag (input, 0 , NULL);
+  qmi_message_wds_modify_profile_input_set_apn_disabled_flag(input, 0, NULL);
 
   qmi_client_wds_modify_profile(ctx->client, input, 10, ctx->cancellable,
                                 (GAsyncReadyCallback)modify_profile_ready,
@@ -487,54 +504,44 @@ void modify_profile_by_id(guint8 profile_id) {
   return;
 }
 
+static void add_new_profile_ready(QmiClientWds *client, GAsyncResult *res) {
+  QmiMessageWdsCreateProfileOutput *output;
+  GError *error = NULL;
+  QmiWdsProfileType profile_type;
 
-static void
-add_new_profile_ready (QmiClientWds *client,
-                      GAsyncResult *res)
-{
-    QmiMessageWdsCreateProfileOutput *output;
-    GError *error = NULL;
-    QmiWdsProfileType profile_type;
+  output = qmi_client_wds_create_profile_finish(client, res, &error);
+  if (!output) {
+    g_printerr("error: operation failed: %s\n", error->message);
+    g_error_free(error);
+    return;
+  }
 
-    output = qmi_client_wds_create_profile_finish (client, res, &error);
-    if (!output) {
-        g_printerr ("error: operation failed: %s\n", error->message);
-        g_error_free (error);
-        return;
+  if (!qmi_message_wds_create_profile_output_get_result(output, &error)) {
+    QmiWdsDsProfileError ds_profile_error;
+
+    if (g_error_matches(error, QMI_PROTOCOL_ERROR,
+                        QMI_PROTOCOL_ERROR_EXTENDED_INTERNAL) &&
+        qmi_message_wds_create_profile_output_get_extended_error_code(
+            output, &ds_profile_error, NULL)) {
+      g_printerr("error: couldn't create profile: ds profile error: %s\n",
+                 qmi_wds_ds_profile_error_get_string(ds_profile_error));
+    } else {
+      g_printerr("error: couldn't create profile: %s\n", error->message);
     }
+    g_error_free(error);
+    qmi_message_wds_create_profile_output_unref(output);
+    return;
+  }
 
-    if (!qmi_message_wds_create_profile_output_get_result (output, &error)) {
-        QmiWdsDsProfileError ds_profile_error;
-
-        if (g_error_matches (error,
-                             QMI_PROTOCOL_ERROR,
-                             QMI_PROTOCOL_ERROR_EXTENDED_INTERNAL) &&
-            qmi_message_wds_create_profile_output_get_extended_error_code (
-                output,
-                &ds_profile_error,
-                NULL)) {
-            g_printerr ("error: couldn't create profile: ds profile error: %s\n",
-                        qmi_wds_ds_profile_error_get_string (ds_profile_error));
-        } else {
-            g_printerr ("error: couldn't create profile: %s\n",
-                        error->message);
-        }
-        g_error_free (error);
-        qmi_message_wds_create_profile_output_unref (output);
-        return;
-    }
-
-    g_print ("New profile created:\n");
-    if (qmi_message_wds_create_profile_output_get_profile_identifier (output,
-                                                                      &profile_type,
-                                                                      &ctx->profile_id,
-                                                                      NULL)) {
-        g_print ("\tProfile type: '%s'\n", qmi_wds_profile_type_get_string(profile_type));
-        g_print ("\tProfile index: '%d'\n", ctx->profile_id);
-    }
-    qmi_message_wds_create_profile_output_unref (output);
+  g_print("New profile created:\n");
+  if (qmi_message_wds_create_profile_output_get_profile_identifier(
+          output, &profile_type, &ctx->profile_id, NULL)) {
+    g_print("\tProfile type: '%s'\n",
+            qmi_wds_profile_type_get_string(profile_type));
+    g_print("\tProfile index: '%d'\n", ctx->profile_id);
     ctx->connection_readiness_step = WDS_CONNECTION_STATE_PROFILE_READY;
-
+  }
+  qmi_message_wds_create_profile_output_unref(output);
 }
 
 void add_new_profile() {
@@ -543,6 +550,8 @@ void add_new_profile() {
   input = qmi_message_wds_create_profile_input_new();
 
   /* We're going to hardcode the fuck out of this for now */
+  qmi_message_wds_create_profile_input_set_profile_type(
+      input, QMI_WDS_PROFILE_TYPE_3GPP, NULL);
   qmi_message_wds_create_profile_input_set_pdp_context_number(input, 1, NULL);
   qmi_message_wds_create_profile_input_set_pdp_type(input, PDP_TYPE_IPV4V6,
                                                     NULL);
@@ -551,11 +560,11 @@ void add_new_profile() {
   qmi_message_wds_create_profile_input_set_profile_name(input, "ims", NULL);
   qmi_message_wds_create_profile_input_set_apn_name(input, "ims", NULL);
   qmi_message_wds_create_profile_input_set_authentication(input, 0, NULL);
-  qmi_message_wds_create_profile_input_set_username (input, "", NULL); 
-  qmi_message_wds_create_profile_input_set_password (input, "" , NULL);
+  qmi_message_wds_create_profile_input_set_username(input, "", NULL);
+  qmi_message_wds_create_profile_input_set_password(input, "", NULL);
   qmi_message_wds_create_profile_input_set_roaming_disallowed_flag(input, 0,
                                                                    NULL);
-  qmi_message_wds_create_profile_input_set_apn_disabled_flag (input, 0 , NULL);
+  qmi_message_wds_create_profile_input_set_apn_disabled_flag(input, 0, NULL);
 
   qmi_client_wds_create_profile(ctx->client, input, 10, ctx->cancellable,
                                 (GAsyncReadyCallback)add_new_profile_ready,
@@ -563,55 +572,264 @@ void add_new_profile() {
   qmi_message_wds_create_profile_input_unref(input);
   return;
 }
-void get_wds_ready_to_connect() {
-  g_printerr("%s: Readiness step: %u\n",__func__, ctx->connection_readiness_step);
-  switch (ctx->connection_readiness_step) {
-    case WDS_CONNECTION_GET_PROFILES:
-      get_profile_list("3gpp");
-      break;
-    case WDS_CONNECTION_FIND_PROFILE_ADD_MODIFY:
-      if (ctx->profile_id == 0) {
-        add_new_profile();
-      } else {
-        modify_profile_by_id(ctx->profile_id);
-      }
-      break;
-    case WDS_CONNECTION_STATE_PROFILE_READY:
-      g_printerr("*** WDS_CONNECTION_STATE_PROFILE_READY\n");
-      break;
-    case WDS_CONNECTION_STATE_SETUP_DATA_FORMAT:
-      break;
-    case WDS_CONNECTION_STATE_SETUP_LINK:
-      break;
-    case WDS_CONNECTION_STATE_LINK_BRINGUP:
-      break;
-    case WDS_CONNECTION_STATE_SET_IP_BEARER_METHOD:
-      break;
-    case WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV4:
-      break;
-    case WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV4:
-      break;
-    case WDS_CONNECTION_STATE_DO_START_NETWORK_IPV4:
-      wds_start_network();
-      break;
-    case WDS_CONNECTION_STATE_REGISTER_WDS_INDICATIONS_IPV4:
-      break;
-    case WDS_CONNECTION_STATE_GET_SETTINGS_IPV4:
-      break;
-    case WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV6:
-      break;
-    case WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV6:
-      break;
-    case WDS_CONNECTION_STATE_DO_START_NETWORK_IPV6:
-      break;
-    case WDS_CONNECTION_STATE_ENABLE_INDICATIONS_IPV6:
-      break;
-    case WDS_CONNECTION_STATE_GET_SETTINGS_IPV6:
-      break;
-    default: 
-      g_info("We hit the default case\n");
-      break;
+
+void qmi_set_data_format() {
+  g_printerr("*** %s: dummy\n", __func__);
+  ctx->connection_readiness_step++;
+}
+
+static void wds_connection_setup_link_ready(QmiDevice *device,
+                                            GAsyncResult *res) {
+  GError *error = NULL;
+  g_printerr("**************************%s\n", __func__);
+  ctx->link_name =
+      qmi_device_add_link_with_flags_finish(device, res, &ctx->mux_id, &error);
+  if (!ctx->link_name) {
+    g_print("ERROR ADDING LINK\n");
+    g_prefix_error(&error, "failed to add link for device: ");
+
+  } else {
+    g_print("Add link ready. Link name: %s, mux id: %u\n", ctx->link_name,
+            ctx->mux_id);
+    ctx->connection_readiness_step++;
   }
+}
+
+void wds_connection_setup_link() {
+  // We need to find a way to read the used mux ids. If mux id already exists
+  // then we're fucked up No. The automatic flag doesn't work.
+  // QMI_DEVICE_MUX_ID_AUTOMATIC
+  QmiDeviceAddLinkFlags flags = (QMI_DEVICE_ADD_LINK_FLAGS_INGRESS_MAP_CKSUMV4 |
+                                 QMI_DEVICE_ADD_LINK_FLAGS_EGRESS_MAP_CKSUMV4);
+  qmi_device_add_link_with_flags(
+      ctx->device, QMI_DEVICE_MUX_ID_AUTOMATIC, "rmnet_ipa0", "qmapmux0.", flags, NULL,
+      (GAsyncReadyCallback)wds_connection_setup_link_ready, NULL);
+}
+
+static void
+bind_mux_data_port_ready (QmiClientWds *client,
+                          GAsyncResult *res,
+                          GTask        *task)
+{
+    GError                                        *error = NULL;
+    g_autoptr(QmiMessageWdsBindMuxDataPortOutput)  output = NULL;
+    g_print("*** %s\n", __func__);
+    output = qmi_client_wds_bind_mux_data_port_finish (client, res, &error);
+    if (!output || !qmi_message_wds_bind_mux_data_port_output_get_result (output, &error)) {
+        g_print ("Couldn't bind mux data port: %s", error->message);
+        return;
+    }
+
+    /* Keep on */
+    ctx->connection_readiness_step++;
+}
+
+void bind_data_port() {
+    g_autoptr(QmiMessageWdsBindDataPortInput) input = NULL;
+  ctx->endpoint_ifnum = 1;
+  ctx->endpoint_type = QMI_DATA_ENDPOINT_TYPE_EMBEDDED;
+  g_print( "binding to mux id %d", ctx->mux_id);
+  input = qmi_message_wds_bind_mux_data_port_input_new();
+ qmi_message_wds_bind_mux_data_port_input_set_endpoint_info(
+      input, ctx->endpoint_type, ctx->endpoint_ifnum, NULL);
+  qmi_message_wds_bind_mux_data_port_input_set_mux_id(input, ctx->mux_id, NULL);
+
+  qmi_client_wds_bind_mux_data_port(
+      ctx->client, input, 10, ctx->cancellable,
+      (GAsyncReadyCallback)bind_mux_data_port_ready, NULL);
+}
+
+
+/** GET SETTINGS ***/
+
+
+static void
+get_current_settings_ready (QmiClientWds *client, GAsyncResult *res)
+{
+    GError *error = NULL;
+    QmiMessageWdsGetCurrentSettingsOutput *output;
+
+    output = qmi_client_wds_get_current_settings_finish (client, res, &error);
+    if (!output || !qmi_message_wds_get_current_settings_output_get_result (output, &error)) {
+
+        /* Otherwise, just go on as we're asking for DHCP */
+        g_print ("couldn't get current settings: %s", error->message);
+        g_error_free (error);
+
+    } 
+    
+    QmiWdsIpFamily ip_family = QMI_WDS_IP_FAMILY_UNSPECIFIED;
+        guint32 mtu = 0;
+        GArray *array;
+
+        if (!qmi_message_wds_get_current_settings_output_get_ip_family (output, &ip_family, &error)) {
+            g_print (" IP Family: failed (%s); assuming IPv4", error->message);
+            g_clear_error (&error);
+            ip_family = QMI_WDS_IP_FAMILY_IPV4;
+        }
+        g_print (" IP Family: %s",
+                (ip_family == QMI_WDS_IP_FAMILY_IPV4) ? "IPv4" :
+                   (ip_family == QMI_WDS_IP_FAMILY_IPV6) ? "IPv6" : "unknown");
+
+        if (!qmi_message_wds_get_current_settings_output_get_mtu (output, &mtu, &error)) {
+            g_print ("       MTU: failed (%s)", error->message);
+            g_clear_error (&error);
+        }
+/*
+        if (ip_family == QMI_WDS_IP_FAMILY_IPV4)
+            ctx->ipv4_config = get_ipv4_config (ctx->self, ctx->ip_method, output, mtu);
+        else if (ip_family == QMI_WDS_IP_FAMILY_IPV6)
+            ctx->ipv6_config = get_ipv6_config (ctx->self, ctx->ip_method, output, mtu);*/
+
+        /* Domain names */
+        if (qmi_message_wds_get_current_settings_output_get_domain_name_list (output, &array, &error)) {
+            GString *s = g_string_sized_new (array ? (array->len * 20) : 1);
+            guint i;
+
+            for (i = 0; array && (i < array->len); i++) {
+                if (s->len)
+                    g_string_append (s, ", ");
+                g_string_append (s, g_array_index (array, const char *, i));
+            }
+            g_print ("   domains: %s", s->str);
+            g_string_free (s, TRUE);
+        } else {
+            g_print ("   domains: failed (%s)", error ? error->message : "unknown");
+            g_clear_error (&error);
+        }
+
+    //    process_operator_reserved_pco (self, output);
+  
+
+    if (output)
+        qmi_message_wds_get_current_settings_output_unref (output);
+
+    /* Keep on */
+    ctx->connection_readiness_step++;
+
+}
+
+static void
+get_current_settings ()
+{
+    QmiMessageWdsGetCurrentSettingsInput *input;
+    QmiWdsRequestedSettings requested;
+
+    requested = QMI_WDS_REQUESTED_SETTINGS_DNS_ADDRESS |
+                QMI_WDS_REQUESTED_SETTINGS_GRANTED_QOS |
+                QMI_WDS_REQUESTED_SETTINGS_IP_ADDRESS |
+                QMI_WDS_REQUESTED_SETTINGS_GATEWAY_INFO |
+                QMI_WDS_REQUESTED_SETTINGS_MTU |
+                QMI_WDS_REQUESTED_SETTINGS_DOMAIN_NAME_LIST |
+                QMI_WDS_REQUESTED_SETTINGS_IP_FAMILY |
+                QMI_WDS_REQUESTED_SETTINGS_OPERATOR_RESERVED_PCO;
+
+    input = qmi_message_wds_get_current_settings_input_new ();
+    qmi_message_wds_get_current_settings_input_set_requested_settings (input, requested, NULL);
+    qmi_client_wds_get_current_settings (ctx->client,
+                                         input,
+                                         10,
+                                         NULL,
+                                         (GAsyncReadyCallback)get_current_settings_ready,
+                                         NULL);
+    qmi_message_wds_get_current_settings_input_unref (input);
+}
+
+
+/*** END OF GET SETTINGS *****/
+gboolean get_wds_ready_to_connect() {
+  g_printerr("%s: Readiness step: %u\n", __func__,
+             ctx->connection_readiness_step);
+  switch (ctx->connection_readiness_step) {
+  case WDS_CONNECTION_GET_PROFILES:
+    g_printerr("*** WDS_CONNECTION_GET_PROFILES\n");
+    get_profile_list("3gpp");
+    break;
+  case WDS_CONNECTION_FIND_PROFILE_ADD_MODIFY:
+    g_printerr("*** WDS_CONNECTION_FIND_PROFILE_ADD_MODIFY\n");
+    if (ctx->profile_id == 0) {
+      add_new_profile();
+    } else {
+      modify_profile_by_id(ctx->profile_id);
+    }
+    break;
+  case WDS_CONNECTION_STATE_PROFILE_READY:
+    g_printerr("*** WDS_CONNECTION_STATE_PROFILE_READY: Profile ID is %u\n",
+               ctx->profile_id);
+    ctx->connection_readiness_step = WDS_CONNECTION_STATE_SETUP_DATA_FORMAT;
+    break;
+  case WDS_CONNECTION_STATE_SETUP_DATA_FORMAT:
+    g_printerr("*** WDS_CONNECTION_STATE_SETUP_DATA_FORMAT\n");
+    qmi_set_data_format();
+    break;
+  case WDS_CONNECTION_STATE_SETUP_LINK:
+    g_printerr("*** WDS_CONNECTION_STATE_SETUP_LINK\n");
+    wds_connection_setup_link();
+    break;
+  case WDS_CONNECTION_STATE_LINK_BRINGUP:
+    g_printerr("*** WDS_CONNECTION_STATE_LINK_BRINGUP\n");
+        char temp[32] = {0};
+    sscanf(temp, "ifconfig %s up", ctx->link_name);
+    system(temp); // LIKE ANIMALS
+    ctx->connection_readiness_step++; 
+//    ctx->connection_readiness_step = WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV4;
+    break;
+  case WDS_CONNECTION_STATE_SET_IP_BEARER_METHOD:
+    g_printerr("*** WDS_CONNECTION_STATE_SET_IP_BEARER_METHOD [dummy]\n");
+    ctx->connection_readiness_step++; 
+    break;
+  case WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV4:
+    g_printerr("*** WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV4\n");
+    bind_data_port();
+    break;
+  case WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV4:
+    g_printerr("*** WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV4 [dummy]\n");
+    ctx->connection_readiness_step++; 
+    break;
+  case WDS_CONNECTION_STATE_DO_START_NETWORK_IPV4:
+    g_printerr("*** WDS_CONNECTION_STATE_DO_START_NETWORK_IPV4\n");
+    wds_start_network();
+    break;
+  case WDS_CONNECTION_STATE_WAIT_FOR_COMPLETION_NET_START_IPV4:
+      g_printerr("Waiting for response...");
+      sleep(1);
+      break;
+  case WDS_CONNECTION_STATE_REGISTER_WDS_INDICATIONS_IPV4:
+    g_printerr("*** WDS_CONNECTION_STATE_REGISTER_WDS_INDICATIONS_IPV4\n");
+    ctx->connection_readiness_step++;
+    break;
+  case WDS_CONNECTION_STATE_GET_SETTINGS_IPV4:
+    g_printerr("*** WDS_CONNECTION_STATE_GET_SETTINGS_IPV4\n");
+    get_current_settings();
+    break;
+  case WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV6:
+    g_printerr("*** WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV6 [stop here]\n");
+    sleep(10);
+    break;
+  case WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV6:
+    g_printerr("*** WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV6\n");
+    break;
+  case WDS_CONNECTION_STATE_DO_START_NETWORK_IPV6:
+    g_printerr("*** WDS_CONNECTION_STATE_DO_START_NETWORK_IPV6\n");
+    break;
+  case WDS_CONNECTION_STATE_ENABLE_INDICATIONS_IPV6:
+    g_printerr("*** WDS_CONNECTION_STATE_ENABLE_INDICATIONS_IPV6\n");
+    break;
+  case WDS_CONNECTION_STATE_GET_SETTINGS_IPV6:
+    g_printerr("*** WDS_CONNECTION_STATE_GET_SETTINGS_IPV6\n");
+    break;
+  default:
+    g_info("We hit the default case, giving up\n");
+    return FALSE;
+    break;
+  }
+
+  if (ctx->connection_readiness_step ==
+      WDS_CONNECTION_STATE_GET_SETTINGS_IPV6) {
+    return FALSE;
+  }
+
+  return TRUE;
 }
 /*
  * Hooks to the qmi client
@@ -622,14 +840,15 @@ void wds_start(QmiDevice *device, QmiClientWds *client,
                GCancellable *cancellable) {
 
   /* Initialize context */
-  //GTask *task;
+  // GTask *task;
   ctx = g_slice_new(Context);
   ctx->device = g_object_ref(device);
   ctx->client = g_object_ref(client);
   ctx->cancellable = g_object_ref(cancellable);
   ctx->packet_data_handle = 0xFFFFFFFF;
   //  get_autoconnect_settings();
+  ctx->connection_readiness_step = 0;
+  ctx->profile_id = 0;
   get_pkt_svc_status();
-  //task = g_task_new (ctx, ctx->cancellable, get_wds_ready_to_connect, NULL);
-  get_wds_ready_to_connect();
+  g_timeout_add(5, get_wds_ready_to_connect, NULL);
 }

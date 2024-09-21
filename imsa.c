@@ -167,7 +167,6 @@ void get_ims_services_state() {
       (GAsyncReadyCallback)get_ims_services_status_ready, NULL);
 }
 
-
 void imsa_start(QmiDevice *device, QmiClientImsa *client,
                 GCancellable *cancellable) {
 
