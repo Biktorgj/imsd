@@ -625,12 +625,14 @@ bind_mux_data_port_ready (QmiClientWds *client,
 }
 
 void bind_data_port() {
-    g_autoptr(QmiMessageWdsBindDataPortInput) input = NULL;
+  g_autoptr(QmiMessageWdsBindMuxDataPortInput) input = NULL;
   ctx->endpoint_ifnum = 1;
   ctx->endpoint_type = QMI_DATA_ENDPOINT_TYPE_EMBEDDED;
   g_print( "binding to mux id %d", ctx->mux_id);
+  
   input = qmi_message_wds_bind_mux_data_port_input_new();
- qmi_message_wds_bind_mux_data_port_input_set_endpoint_info(
+
+  qmi_message_wds_bind_mux_data_port_input_set_endpoint_info(
       input, ctx->endpoint_type, ctx->endpoint_ifnum, NULL);
   qmi_message_wds_bind_mux_data_port_input_set_mux_id(input, ctx->mux_id, NULL);
 
