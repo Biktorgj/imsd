@@ -61,6 +61,7 @@ enum {
  WDS_CONNECTION_STATE_GET_SETTINGS_IPV6
 };
 
+guint8 wds_get_readiness_step();
 void wds_do_stop_network (gboolean disable_autoconnect);
 void wds_start(QmiDevice *device,
                 QmiClientWds *client,

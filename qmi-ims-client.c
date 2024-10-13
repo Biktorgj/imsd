@@ -353,6 +353,12 @@ gboolean wait_for_init(void *data) {
   the handler, and then I should be able to bring up rtp and presence.
 
   */
+  guint8 wds_ready = wds_get_readiness_step();
+  g_print("QMICLI: WDS Readiness state: %u\n", wds_ready);
+  if (wds_ready > 12) {
+    g_print("Do\n");
+    imsa_attempt_bind();
+  }
   if (runtime->wds_ready == IMS_INIT_OK &&
       runtime->nas_ready == IMS_INIT_OK &&
       runtime->imss_ready == IMS_INIT_OK &&

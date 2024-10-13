@@ -12,7 +12,7 @@
 #include <libqmi-glib.h>
 
 G_BEGIN_DECLS
-
+void imsa_attempt_bind();
 void imsa_start(QmiDevice *device,
                 QmiClientImsa *client,
                 GCancellable *cancellable);

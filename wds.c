@@ -44,6 +44,10 @@ typedef struct {
   GArray *profile_list;
 } GetProfileListContext;
 
+guint8 wds_get_readiness_step() {
+  return ctx->connection_readiness_step;
+}
+
 static void get_next_profile_settings(GetProfileListContext *inner_ctx);
 
 static void get_profile_settings_ready(QmiClientWds *client, GAsyncResult *res,
