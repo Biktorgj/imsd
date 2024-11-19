@@ -15,9 +15,14 @@ typedef struct {
   QmiDevice *device;
   QmiClientImsa *client;
   GCancellable *cancellable;
+  guint8 sub_requested;
 } Context;
 
 static Context *ctx;
+
+guint8 is_sub_requested() {
+        return ctx->sub_requested;
+}
 
 static void get_ims_registration_status_ready(QmiClientImsa *client,
                                               GAsyncResult *res) {
@@ -174,9 +179,14 @@ void imsa_attempt_bind_finish(QmiClientImsa *client, GAsyncResult *res) {
     g_print("BIND FINISH\n");
     QmiMessageImsaImsaBindSubscriptionOutput *output;
     output = qmi_client_imsa_imsa_bind_subscription_finish (client, res, &error);
-    if (!output || qmi_message_imsa_imsa_bind_subscription_output_get_result(output, &error)) {
-        g_print("Err: IMSA bind failed: %s\n", error->message);
+    if (!output) {
+        g_print("FATAL: Output seems empty!\n");
     }
+    
+    /*if (!output || qmi_message_imsa_imsa_bind_subscription_output_get_result(output, &error)) {
+        g_print("Err: IMSA bind failed: %s\n", error->message);
+    } */
+    g_print("END %s\n", __func__);
 }
 
 
@@ -184,8 +194,9 @@ void imsa_attempt_bind() {
   g_print("Attempting to bind to IMS...\n");
   QmiMessageImsaImsaBindSubscriptionInput *input;
   guint32 subscription_type = 0x00;
+  ctx->sub_requested = 1;
   input = qmi_message_imsa_imsa_bind_subscription_input_new();
-  qmi_message_imsa_imsa_bind_subscription_input_set_binding(input, subscription_type, NULL);
+  qmi_message_imsa_imsa_bind_subscription_input_set_subscription_type(input, subscription_type, NULL);
   qmi_client_imsa_imsa_bind_subscription(
       ctx->client, input, 10, ctx->cancellable,
       (GAsyncReadyCallback)imsa_attempt_bind_finish, NULL);

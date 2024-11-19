@@ -10,6 +10,8 @@
 #include <glib/gprintf.h>
 #include <libqmi-glib.h>
 #include <libqrtr-glib.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #define VALIDATE_MASK_NONE(str) (str ? str : "none")
 #define QMI_WDS_IP_FAMILY_IPV4 4
 
@@ -647,13 +649,60 @@ void bind_data_port() {
 
 
 /** GET SETTINGS ***/
+static void
+qmi_inet4_ntop (guint32 address, char *buf, const gsize buflen)
+{
+    struct in_addr a = { .s_addr = GUINT32_TO_BE (address) };
+
+    g_assert (buflen >= INET_ADDRSTRLEN);
+
+    /* We can ignore inet_ntop() return value if 'buf' is
+     * at least INET_ADDRSTRLEN in size. */
+    memset (buf, 0, buflen);
+    g_assert (inet_ntop (AF_INET, &a, buf, buflen));
+}
 
 
+
+guint
+mm_count_bits_set (gulong number)
+{
+    guint c;
+
+    for (c = 0; number; c++)
+        number &= number - 1;
+    return c;
+}
+
+guint
+mm_find_bit_set (gulong number)
+{
+    guint c = 0;
+
+    for (c = 0; !(number & 0x1); c++)
+        number >>= 1;
+    return c;
+}
+
+guint
+mm_netmask_to_cidr (const gchar *netmask)
+{
+    guint32 num = 0;
+
+    inet_pton (AF_INET, netmask, &num);
+    return mm_count_bits_set (num);
+}
 static void
 get_current_settings_ready (QmiClientWds *client, GAsyncResult *res)
 {
     GError *error = NULL;
     QmiMessageWdsGetCurrentSettingsOutput *output;
+    char buf[16];
+    char buf2[16];
+    const gchar *dns[3] = { 0 };
+    guint dns_idx = 0;
+    guint32 addr = 0;
+    guint32 prefix = 0;
 
     output = qmi_client_wds_get_current_settings_finish (client, res, &error);
     if (!output || !qmi_message_wds_get_current_settings_output_get_result (output, &error)) {
@@ -667,6 +716,7 @@ get_current_settings_ready (QmiClientWds *client, GAsyncResult *res)
     QmiWdsIpFamily ip_family = QMI_WDS_IP_FAMILY_UNSPECIFIED;
         guint32 mtu = 0;
         GArray *array;
+      char temp[64] = {0};
 
         if (!qmi_message_wds_get_current_settings_output_get_ip_family (output, &ip_family, &error)) {
             g_print (" IP Family: failed (%s); assuming IPv4", error->message);
@@ -706,6 +756,71 @@ get_current_settings_ready (QmiClientWds *client, GAsyncResult *res)
 
     //    process_operator_reserved_pco (self, output);
   
+    /* IPv4 subnet mask */
+    if (!qmi_message_wds_get_current_settings_output_get_ipv4_gateway_subnet_mask (output, &addr, &error)) {
+        g_print ("failed to read IPv4 netmask: %s\n", error->message);
+        g_clear_error (&error);
+        return ;
+    }
+
+    qmi_inet4_ntop (addr, buf, sizeof (buf));
+    prefix = mm_netmask_to_cidr (buf);
+
+    /* IPv4 address */
+    if (!qmi_message_wds_get_current_settings_output_get_ipv4_address (output, &addr, &error)) {
+        g_print("IPv4 family but no IPv4 address: %s\n", error->message);
+        g_clear_error (&error);
+        return ;
+    }
+  /* IPv4 address */
+    qmi_inet4_ntop (addr, buf, sizeof (buf));
+    g_print ( "    address: %s/%d\n", buf, prefix);
+    sprintf(temp, "ip addr add %s/%d dev %s ",buf, prefix, ctx->link_name);
+    g_print("Executing system command %s \n", temp);
+    system(temp); // LIKE ANIMALS
+    /* IPv4 gateway address */
+    if (qmi_message_wds_get_current_settings_output_get_ipv4_gateway_address (output, &addr, &error)) {
+        qmi_inet4_ntop (addr, buf, sizeof (buf));
+        g_print ( "    gateway: %s\n", buf);
+    } else {
+        g_print ( "    gateway: failed (%s)\n", error->message);
+        g_clear_error (&error);
+    }
+
+    temp[0] = 0x00;
+    sprintf(temp, "ip route add default via %s dev %s ", buf, ctx->link_name);
+    g_print("Executing system command %s", temp);
+    system(temp); // LIKE ANIMALS
+    /* IPv4 DNS #1 */
+    if (qmi_message_wds_get_current_settings_output_get_primary_ipv4_dns_address (output, &addr, &error)) {
+        qmi_inet4_ntop (addr, buf, sizeof (buf));
+        dns[dns_idx++] = buf;
+        g_print ( "    DNS #1: %s\n", buf);
+    } else {
+        g_print ( "    DNS #1: failed (%s)\n", error->message);
+        g_clear_error (&error);
+    }
+
+    /* IPv4 DNS #2 */
+    if (qmi_message_wds_get_current_settings_output_get_secondary_ipv4_dns_address (output, &addr, &error)) {
+        qmi_inet4_ntop (addr, buf2, sizeof (buf2));
+        dns[dns_idx++] = buf2;
+        g_print ( "    DNS #2: %s\n", buf2);
+    } else {
+        g_print ( "    DNS #2: failed (%s)\n", error->message);
+        g_clear_error (&error);
+    }
+
+//    if (dns_idx > 0)
+//        mm_bearer_ip_config_set_dns (config, (const gchar **) &dns);
+
+    if (mtu) {
+//        mm_bearer_ip_config_set_mtu (config, mtu);
+        g_print ( "       MTU: %d", mtu);
+    }
+
+
+
 
     if (output)
         qmi_message_wds_get_current_settings_output_unref (output);
@@ -774,8 +889,9 @@ gboolean get_wds_ready_to_connect() {
     break;
   case WDS_CONNECTION_STATE_LINK_BRINGUP:
     g_printerr("*** WDS_CONNECTION_STATE_LINK_BRINGUP\n");
-        char temp[32] = {0};
-    sscanf(temp, "ifconfig %s up", ctx->link_name);
+    char temp[32] = {0};
+    sprintf(temp, "ip link set %s up", ctx->link_name);
+    g_print("Executing system command %s\n", temp);
     system(temp); // LIKE ANIMALS
     ctx->connection_readiness_step++; 
 //    ctx->connection_readiness_step = WDS_CONNECTION_STATE_BIND_DATA_PORT_IPV4;

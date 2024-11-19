@@ -355,7 +355,7 @@ gboolean wait_for_init(void *data) {
   */
   guint8 wds_ready = wds_get_readiness_step();
   g_print("QMICLI: WDS Readiness state: %u\n", wds_ready);
-  if (wds_ready > 12) {
+  if (wds_ready > 12 && !is_sub_requested()) {
     g_print("Do\n");
     imsa_attempt_bind();
   }

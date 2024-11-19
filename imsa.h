@@ -12,6 +12,7 @@
 #include <libqmi-glib.h>
 
 G_BEGIN_DECLS
+guint8 is_sub_requested();
 void imsa_attempt_bind();
 void imsa_start(QmiDevice *device,
                 QmiClientImsa *client,
