@@ -10,7 +10,7 @@
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <libqmi-glib.h>
-
+#include <stdint.h>
 G_BEGIN_DECLS
 enum {
     PROFILE_TYPE_3GPP = 1,
@@ -58,7 +58,8 @@ enum {
  WDS_CONNECTION_STATE_SELECT_IP_FAMILY_IPV6, // async
  WDS_CONNECTION_STATE_DO_START_NETWORK_IPV6,
  WDS_CONNECTION_STATE_ENABLE_INDICATIONS_IPV6,
- WDS_CONNECTION_STATE_GET_SETTINGS_IPV6
+ WDS_CONNECTION_STATE_GET_SETTINGS_IPV6,
+ WDS_CONNECTION_STATE_FINISHED = 99
 };
 
 guint8 wds_get_readiness_step();
@@ -66,6 +67,12 @@ void wds_do_stop_network (gboolean disable_autoconnect);
 void wds_start(QmiDevice *device,
                 QmiClientWds *client,
                 GCancellable *cancellable);
+
+guint32 wds_get_packet_handle();
+guint8 wds_get_profile_id();
+guint8 wds_get_mux_id();
+void wds_copy_ip_address(uint8_t *ip_address);
+gboolean get_wds_ready_to_connect();
 G_END_DECLS
 
 #endif

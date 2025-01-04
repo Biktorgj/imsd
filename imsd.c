@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: GPL-3 */
 
 /****************************
- *  _                   _   *
+ * open                 _   *
  * (_)                 | |  *
  *  _ _ __ ___  ___  __| |  *
  * | | '_ ` _ \/ __|/ _` |  *
  * | | | | | | \__ \ (_| |  *
  * |_|_| |_| |_|___/\__,_|  *
  *                          *
- *        version 0.0.1     *
+ *        version 0.0.3     *
  ****************************/
 #include <fcntl.h>
 #include <stdbool.h>
@@ -28,6 +28,7 @@
 #include <libqrtr-glib.h>
 
 /* Local includes */
+#include "dcm.h"
 #include "imsd.h"
 #include "qmi-ims-client.h"
 
@@ -55,35 +56,36 @@ typedef struct {
 } _CmdLine;
 
 _CmdLine CmdLine;
+
+IMSD_Runtime *runtime;
+
 static GOptionEntry imsd_params[] = {
     {"device", 'd', 0, G_OPTION_ARG_STRING, &CmdLine.device_arg},
     {"version", 'v', 0, G_OPTION_ARG_NONE, &CmdLine.version},
-    {NULL}
-    };
+    {NULL}};
 
-static gboolean quit_cb(gpointer user_data) {
-  g_printerr("Caught signal, shutting down...\n");
-  if (cancellable) {
-    /* Ignore consecutive requests of cancellation */
-    if (!g_cancellable_is_cancelled(cancellable)) {
-      g_printerr("Stopping IMSD...\n");
-      cancel_connection_manager();
-      g_cancellable_cancel(cancellable);
-    }
-  }
-  g_printerr("Exiting!\n");
-  if (loop)
-    g_idle_add((GSourceFunc)g_main_loop_quit, loop);
-  else
-    exit(0);
+// static gboolean imsd_quit_callback(gpointer user_data) {
+//   g_printerr("[IMSD] Caught signal, shutting down...\n");
+//   if (cancellable) {
+     /* Ignore consecutive requests of cancellation */
+//     if (!g_cancellable_is_cancelled(cancellable)) {
+//       g_printerr("[IMSD] Stopping client services...\n");
+//       cancel_connection_manager();
+//       g_cancellable_cancel(cancellable);
+//     }
+//   }
+//   g_printerr("Exiting!\n");
+//   if (loop)
+//     g_idle_add((GSourceFunc)g_main_loop_quit, loop);
+//   else
+//     exit(0);
 
-  return FALSE;
-}
+//   return FALSE;
+// }
 
 int main(int argc, char **argv) {
   int lockfile;
   fprintf(stdout, "IMS Daemon %s \n", RELEASE_VER);
-  GFile *device_path;
   GOptionContext *context;
   GError *error = NULL;
 
@@ -92,19 +94,19 @@ int main(int argc, char **argv) {
   g_option_context_add_main_entries(context, imsd_params, NULL);
   if (!g_option_context_parse(context, &argc, &argv, &error)) {
     g_printerr("Error: %s\n", error->message);
-    exit(EXIT_FAILURE);
+    return -EINVAL;
   }
   g_option_context_free(context);
 
   if (CmdLine.version) {
     g_printerr("%s version %s\n", PROG_NAME, RELEASE_VER);
-    exit(EXIT_SUCCESS);
+    return 0;
   }
 
   /* No device path given? */
   if (!CmdLine.device_arg) {
     g_printerr("error: no device path specified\n");
-    exit(EXIT_FAILURE);
+    return -EINVAL;
   }
 
   /* We shall only start once */
@@ -118,32 +120,47 @@ int main(int argc, char **argv) {
     return -EBUSY;
   }
 
+  /* Create a slice for the runtime */
+  runtime = g_new(IMSD_Runtime, 1);
+  
   /* Build new GFile from the commandline arg */
-  device_path = g_file_new_for_commandline_arg(CmdLine.device_arg);
-  cancellable = g_cancellable_new();
+  runtime->client_path = g_file_new_for_commandline_arg(CmdLine.device_arg);
+  runtime->cancellable = g_cancellable_new();
+  g_mutex_init(&runtime->mutex);
+  g_cond_init(&runtime->cond);
 
-  g_unix_signal_add(SIGTERM, quit_cb, NULL);
-  g_unix_signal_add(SIGINT, quit_cb, NULL);
+  /*
+   * Here's where we start:
+   *  1. We kickstart a series of QMI clients while
+   *  2. We start an independent QMI server to answer
+   *     the modem
+   */
+
+  /*
+    if (!create_qmi_client_connection(device_path, cancellable))
+      return EXIT_FAILURE;
+  */
+
+  GThread *qmi_client = g_thread_new("QMI Client", initialize_qmi_client, runtime);
+  GThread *qmi_server = g_thread_new("QMI Server", initialize_qmi_server, runtime);
+
 
   loop = g_main_loop_new(NULL, FALSE);
 
-  // Let's start here
-  /*
-    We're hardcoding this to QMI for now
-    But we could easily have different codepaths depending
-    on the device used
-  */
-  if (!create_qmi_client_connection(device_path, cancellable))
-    return EXIT_FAILURE;
 
+  // Wait for threads to finish
+  g_thread_join(qmi_client);
+  g_thread_join(qmi_server);
+  // g_thread_join(consumer);
   g_main_loop_run(loop);
+
   g_main_loop_unref(loop);
 
   if (cancellable)
     g_object_unref(cancellable);
   close(lockfile);
   unlink(LOCK_FILE);
-  
+
   g_printerr("bye bye!\n");
   return 0;
 }

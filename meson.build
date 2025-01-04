@@ -3,11 +3,10 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-
 project (
   'imsd',
   'c',
-  version : '0.0.1',
+  version : '0.0.4',
   license : 'LGPLv3+',
   meson_version : '>= 0.50.0',
   default_options :
@@ -23,6 +22,8 @@ glib_version = '2.56'
 glib_dep = dependency('glib-2.0', version: '>= ' + glib_version)
 gio_unix_dep = dependency('gio-unix-2.0')
 
+libqrtr = meson.get_compiler('c').find_library('qrtr')
+
 c_flags = [
   '-DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_' + glib_version.underscorify(),
   '-DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_' + glib_version.underscorify(),
@@ -35,6 +36,7 @@ deps = [
   dependency('gobject-2.0'),
   dependency('qmi-glib'),
   dependency('qrtr-glib'),
+  libqrtr,
 ]
 
 glib_deps = declare_dependency(
@@ -44,10 +46,13 @@ glib_deps = declare_dependency(
 
 executable('imsd',
   'imsd.c',
-  'qmi-ims-client.c',
   'wds.c',
   'nas.c',
   'imsa.c',
   'imss.c',
+  'dms.c',
+  'dcm.c',
+  'qmi-util.c',
+  'qmi-ims-client.c',
   dependencies: deps,
 )

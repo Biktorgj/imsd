@@ -45,7 +45,7 @@ void get_autoconnect_settings();
 void cancel_connection_manager();
 void release_clients ();
 gboolean create_qmi_client_connection(GFile *file, GCancellable *cancellable);
-
+gpointer initialize_qmi_client(gpointer user_data);
 G_END_DECLS
 
 #endif

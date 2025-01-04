@@ -14,6 +14,9 @@
 G_BEGIN_DECLS
 guint8 is_sub_requested();
 void imsa_attempt_bind();
+void get_registration_state();
+void get_ims_services_state();
+void imss_get_ims_ua();
 void imsa_start(QmiDevice *device,
                 QmiClientImsa *client,
                 GCancellable *cancellable);
