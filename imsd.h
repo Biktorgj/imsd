@@ -98,15 +98,17 @@ typedef struct {
   uint8_t exit_requested;
   uint8_t apn_status;
   gchar *curr_apn;
-  uint8_t wds_ready;
   uint8_t nas_ready;
   uint8_t imss_ready;
   uint8_t imsa_ready;
   uint8_t imsp_ready;
   uint8_t imsrtp_ready;
   uint8_t dms_ready;
-  uint8_t wds_ipv4_ready[MAX_SIM_SLOTS];
-  uint8_t wds_ipv6_ready[MAX_SIM_SLOTS];
+  uint8_t wds_ready[MAX_SIM_SLOTS];
+  // More to come
+  uint8_t mfs_ready;
+  uint8_t voice_svc_ready[MAX_SIM_SLOTS];
+
 } _IMSD_Client_Readiness;
 
 typedef struct {

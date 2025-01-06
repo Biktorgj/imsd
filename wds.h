@@ -63,7 +63,7 @@ enum {
  WDS_CONNECTION_STATE_FINISHED = 99
 };
 
-guint8 wds_get_readiness_step();
+guint8 wds_get_readiness_step(_WDS_Client *wds_client);
 void wds_do_stop_network (gboolean disable_autoconnect);
 void wds_start(QmiDevice *device,
                 QmiClientWds *client,

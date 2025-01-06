@@ -191,25 +191,7 @@ void release_clients() {
   }
 }
 
-static void wds_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
-  GError *error = NULL;
-  imsd_client->handles.wds =
-      qmi_device_allocate_client_finish(dev, res, &error);
-  if (!imsd_client->handles.wds) {
-    imsd_client->readiness.wds_ready = IMS_INIT_ERR;
-
-    g_printerr("error: couldn't create client for the WDSS service: %s\n",
-               error->message);
-    exit(EXIT_FAILURE);
-  }
-  g_printerr("WDS Allocated!\n");
-  imsd_client->readiness.wds_ready = IMS_INIT_OK;
-  /*wds_start(dev, QMI_CLIENT_WDS(imsd_client->handles.wds),
-            imsd_runtime->cancellable);*/
-}
-
-
-static void wds2_allocate_client_ready(QmiDevice *dev, GAsyncResult *res, gpointer user_data) {
+static void wds_allocate_client_ready(QmiDevice *dev, GAsyncResult *res, gpointer user_data) {
   GError *error = NULL;
   _WDS_Client *client = (_WDS_Client*) user_data;
   client->wds =
@@ -338,14 +320,12 @@ static void device_open_ready(QmiDevice *dev, GAsyncResult *res) {
   g_info("QMI Device at '%s' ready", qmi_device_get_path_display(dev));
 
   /* We allocate all of our clients at once */
-  qmi_device_allocate_client(
-      dev, QMI_SERVICE_WDS, QMI_CID_NONE, 10, imsd_runtime->cancellable,
-      (GAsyncReadyCallback)wds_allocate_client_ready, NULL);
 
+  /* We will use a client for each slot in WDS */
   for (uint8_t i = 0; i < MAX_SIM_SLOTS; i++) {
       qmi_device_allocate_client(
       dev, QMI_SERVICE_WDS, QMI_CID_NONE, 10, imsd_runtime->cancellable,
-      (GAsyncReadyCallback)wds2_allocate_client_ready, &imsd_client->WDS_Client[i]);
+      (GAsyncReadyCallback)wds_allocate_client_ready, &imsd_client->WDS_Client[i]);
   }
 
   qmi_device_allocate_client(
@@ -378,34 +358,35 @@ static void do_allocate_rest(QmiDevice *dev) {
 gboolean wait_for_init(void *data) {
   imsd_runtime->current_network_provider[0] = get_carrier_data();
   g_print("[QMI Client] Client allocation status:\n");
-  g_print(" - WDS: %i \n", imsd_client->readiness.wds_ready);
-  g_print(" - NAS: %i\n", imsd_client->readiness.nas_ready);
-  g_print(" - IMSS: %i\n", imsd_client->readiness.imss_ready);
-  g_print(" - IMSA: %i\n", imsd_client->readiness.imsa_ready);
-  g_print(" - DMS: %i\n", imsd_client->readiness.dms_ready);
-  g_print(" - IMSP: %i\n", imsd_client->readiness.imsp_ready);
-  g_print(" - IMS RTP: %i\n", imsd_client->readiness.imsrtp_ready);
-  g_print(" - Network (Slot 0):\n");
-  g_print("   - MCC: %i\n", imsd_runtime->current_network_provider[0].mcc);
-  g_print("   - MNC: %i\n", imsd_runtime->current_network_provider[0].mnc);
-  g_print(" - Network (Slot 1):\n");
-  g_print("   - MCC: %i\n", imsd_runtime->current_network_provider[1].mcc);
-  g_print("   - MNC: %i\n", imsd_runtime->current_network_provider[1].mnc);
+  g_print(" - Network Access Service: %s\n", imsd_client->readiness.nas_ready ? "Ready":"Not ready" );
+  g_print(" - IMS Settings Service: %s\n", imsd_client->readiness.imss_ready? "Ready":"Not ready");
+  g_print(" - IMS Application Service: %s\n", imsd_client->readiness.imsa_ready? "Ready":"Not ready");
+  g_print(" - Device Management Service: %s\n", imsd_client->readiness.dms_ready? "Ready":"Not ready");
+  g_print(" - IMS Presence Service: %s\n", imsd_client->readiness.imsp_ready? "Ready":"Not ready");
+  g_print(" - IMS Real Time Transport Protocol Service: %s\n", imsd_client->readiness.imsrtp_ready? "Ready":"Not ready");
+  g_print(" - Modem Filesystem Service: %s\n", imsd_client->readiness.mfs_ready? "Ready":"Not ready");
+  for (uint8_t i = 0; i < MAX_SIM_SLOTS; i++) {
+    g_print(" - SIM Slot %u\n", i);
+    g_print("   - Network: %i-%i\n", imsd_runtime->current_network_provider[i].mcc, imsd_runtime->current_network_provider[i].mnc);
+    g_print("   - Voice Service (Slot %u): %s\n",i,  imsd_client->readiness.voice_svc_ready[i]? "Ready":"Not ready");
+    g_print("   - Wireless Data Service (Slot %u): %s \n",i ,imsd_client->WDS_Client[i].wds_ready? "Ready":"Not ready");
+  }
   /*
   IMSRTP needs to be explicitly told to start with a subscription ID
   Me thought wrong. First I need to bring up the network, tell it
   the handler, and then I should be able to bring up rtp and presence.
-
+  I probably need to use the subscription and instance ID the DCM
+  gives me.
+  
+  Another thing to improve is error handling in the DCM. If you
+  tell it you started the network, returning an OK to the 
+  activate request, but you didn't actually start it or if it
+  failed for some reason, it starts spamming the server until 
+  everything falls apart (and by everything I mean modemmanager 
+  ends up stopping the modem and restarting it or you end up
+  with a crashdump)
   */
 
-  g_print("[QMI Client] WDS Connection step: %u\n", wds_get_readiness_step());
-  if (wds_get_readiness_step() == WDS_CONNECTION_STATE_FINISHED &&
-      !is_sub_requested()) {
-    g_print("[QMI Client] Looop!\n");
-    // do_allocate_rest(imsd_client->handles.device);
-    // imss_start_qualcomm_ip_call_settings();
-    //  attempt_start_imss_services();
-  }
 /*  if (wds_get_readiness_step() == WDS_CONNECTION_STATE_FINISHED) {
     uint8_t ipaddr[128] = {0};
     wds_copy_ip_address(ipaddr);
@@ -414,7 +395,7 @@ gboolean wait_for_init(void *data) {
   get_ims_services_state();
   get_registration_state();
   //  imss_get_ims_ua();
-  if (imsd_client->readiness.wds_ready == IMS_INIT_OK &&
+  if (/*imsd_client->readiness.wds_ready == IMS_INIT_OK &&*/
       imsd_client->readiness.dms_ready == IMS_INIT_OK &&
       imsd_client->readiness.nas_ready == IMS_INIT_OK &&
       imsd_client->readiness.imss_ready == IMS_INIT_OK &&

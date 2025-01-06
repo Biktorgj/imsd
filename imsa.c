@@ -33,7 +33,6 @@ static void get_ims_registration_status_ready(QmiClientImsa *client,
                                               GAsyncResult *res) {
   QmiMessageImsaGetImsRegistrationStatusOutput *output;
   QmiImsaImsRegistrationStatus registration_status;
-  QmiImsaRegistrationTechnology registration_technology;
   GError *error = NULL;
 
   output =
@@ -53,17 +52,28 @@ static void get_ims_registration_status_ready(QmiClientImsa *client,
     return;
   }
 
-  g_print("[%s] IMS registration:\n", qmi_device_get_path_display(ctx->device));
+  /* Should add here multiple subscriptions*/
+  g_print("   - IMS Status: ");
 
   if (qmi_message_imsa_get_ims_registration_status_output_get_ims_registration_status(
-          output, &registration_status, NULL))
-    g_print(" - Status: '%s'\n",
-            qmi_imsa_ims_registration_status_get_string(registration_status));
-
-  if (qmi_message_imsa_get_ims_registration_status_output_get_ims_registration_technology(
-          output, &registration_technology, NULL))
-    g_print(" - Technology: '%s'\n", qmi_imsa_registration_technology_get_string(
-                                        registration_technology));
+          output, &registration_status, NULL))  {
+    switch (registration_status) {
+      case 0:
+      g_print("Not registered\n");
+      break;
+      case 1:
+      g_print("Connection in progress\n");
+      break;
+      case 2:
+      g_print("Registered\n");
+      break;
+      default:
+      g_print("Limited service\n");
+      break;
+    }
+  } else {
+      g_print("Unavailable\n");
+  }
 
   qmi_message_imsa_get_ims_registration_status_output_unref(output);
 }
@@ -72,15 +82,10 @@ static void get_ims_services_status_ready(QmiClientImsa *client,
                                           GAsyncResult *res) {
   QmiMessageImsaGetImsServicesStatusOutput *output;
   QmiImsaServiceStatus service_sms_status;
-  QmiImsaRegistrationTechnology service_sms_technology;
   QmiImsaServiceStatus service_voice_status;
-  QmiImsaRegistrationTechnology service_voice_technology;
   QmiImsaServiceStatus service_vt_status;
-  QmiImsaRegistrationTechnology service_vt_technology;
   QmiImsaServiceStatus service_ut_status;
-  QmiImsaRegistrationTechnology service_ut_technology;
   QmiImsaServiceStatus service_vs_status;
-  QmiImsaRegistrationTechnology service_vs_technology;
   GError *error = NULL;
 
   output = qmi_client_imsa_get_ims_services_status_finish(client, res, &error);
@@ -98,82 +103,119 @@ static void get_ims_services_status_ready(QmiClientImsa *client,
     return;
   }
 
-  g_print("[%s] IMS services:\n", qmi_device_get_path_display(ctx->device));
+  g_print(" - IMS services:\n");
 
-  g_print(" - SMS service\n");
+  g_print("   - SMS over IMS: ");
 
   if (qmi_message_imsa_get_ims_services_status_output_get_ims_sms_service_status(
-          output, &service_sms_status, NULL))
-    g_print("  -->    Status: '%s'\n",
-            qmi_imsa_service_status_get_string(service_sms_status));
+          output, &service_sms_status, NULL)) {
+    switch (service_sms_status) {
+      case 0:
+      g_print("Unavailable\n");
+      break;
+      case 1:
+      g_print("Limited service\n");
+      break;
+      case 2:
+      g_print("Ready\n");
+      break;
+      default:
+      g_print("Unknown state\n");
+      break;
+    }
+  } else {
+      g_print("Legacy GSM mode\n");
+  }
 
-  if (qmi_message_imsa_get_ims_services_status_output_get_ims_sms_service_registration_technology(
-          output, &service_sms_technology, NULL))
-    g_print(
-        "  -->Technology: '%s'\n",
-        qmi_imsa_registration_technology_get_string(service_sms_technology));
-
-  g_print(" - Voice service\n");
+  g_print("   - VoIP service: ");
 
   if (qmi_message_imsa_get_ims_services_status_output_get_ims_voice_service_status(
-          output, &service_voice_status, NULL))
-    g_print("  -->    Status: '%s'\n",
-            qmi_imsa_service_status_get_string(service_voice_status));
-
-  if (qmi_message_imsa_get_ims_services_status_output_get_ims_voice_service_registration_technology(
-          output, &service_voice_technology, NULL))
-    g_print(
-        "  -->Technology: '%s'\n",
-        qmi_imsa_registration_technology_get_string(service_voice_technology));
-
-  g_print(" - Video Telephony service\n");
+          output, &service_voice_status, NULL)) {
+    switch (service_voice_status) {
+      case 0:
+      g_print("Unavailable\n");
+      break;
+      case 1:
+      g_print("Limited service\n");
+      break;
+      case 2:
+      g_print("Ready\n");
+      break;
+      default:
+      g_print("Unknown state\n");
+      break;
+    }
+  } else {
+      g_print("Legacy GSM mode\n");
+  }
+  g_print("   - Video Telephony service: ");
 
   if (qmi_message_imsa_get_ims_services_status_output_get_ims_video_telephony_service_status(
-          output, &service_vt_status, NULL))
-    g_print("  -->    Status: '%s'\n",
-            qmi_imsa_service_status_get_string(service_vt_status));
-
-  if (qmi_message_imsa_get_ims_services_status_output_get_ims_video_telephony_service_registration_technology(
-          output, &service_vt_technology, NULL))
-    g_print("  -->Technology: '%s'\n",
-            qmi_imsa_registration_technology_get_string(service_vt_technology));
-
-  g_print(" - UE to TAS service\n");
+          output, &service_vt_status, NULL)) {    
+      switch (service_vt_status) {
+      case 0:
+      g_print("Unavailable\n");
+      break;
+      case 1:
+      g_print("Limited service\n");
+      break;
+      case 2:
+      g_print("Ready\n");
+      break;
+      default:
+      g_print("Unknown state\n");
+      break;
+    }
+  } else {
+      g_print("Legacy GSM mode\n");
+  }
+  g_print("   - UE to TAS service: ");
 
   if (qmi_message_imsa_get_ims_services_status_output_get_ims_ue_to_tas_service_status(
-          output, &service_ut_status, NULL))
-    g_print("  -->    Status: '%s'\n",
-            qmi_imsa_service_status_get_string(service_ut_status));
-
-  if (qmi_message_imsa_get_ims_services_status_output_get_ims_ue_to_tas_service_registration_technology(
-          output, &service_ut_technology, NULL))
-    g_print("  -->Technology: '%s'\n",
-            qmi_imsa_registration_technology_get_string(service_ut_technology));
-
-  g_print(" - Video Share service\n");
-
+          output, &service_ut_status, NULL)){    
+      switch (service_ut_status) {
+      case 0:
+      g_print("Unavailable\n");
+      break;
+      case 2:
+      g_print("Ready\n");
+      break;
+      default:
+      g_print("Unknown state (%u)\n", service_ut_status);
+      break;
+    }
+  } else {
+      g_print("Unavailable [hint: invalid PDC or incompatible RAT] \n");
+  }
+  g_print("   - Video Share service: ");
   if (qmi_message_imsa_get_ims_services_status_output_get_ims_video_share_service_status(
-          output, &service_vs_status, NULL))
-    g_print("  -->    Status: '%s'\n",
-            qmi_imsa_service_status_get_string(service_vs_status));
-
-  if (qmi_message_imsa_get_ims_services_status_output_get_ims_video_share_service_registration_technology(
-          output, &service_vs_technology, NULL))
-    g_print("  -->Technology: '%s'\n",
-            qmi_imsa_registration_technology_get_string(service_vs_technology));
-
+          output, &service_vs_status, NULL)) {
+      switch (service_vs_status) {
+      case 0:
+      g_print("Running via WLAN\n");
+      break;
+      case 1:
+      g_print("Running via WWAN\n");
+      break;
+      default:
+      g_print("Unknown state (%u)\n", service_ut_status);
+      break;
+    }
+  } else {
+      g_print("Unavailable\n");
+  }
   qmi_message_imsa_get_ims_services_status_output_unref(output);
 }
 
 void get_registration_state() {
-  g_print("Attempting to read IMS registration status...\n");
+  g_print(" - Attempting to read IMS registration status...\n");
   qmi_client_imsa_get_ims_registration_status(
       ctx->client, NULL, 10, ctx->cancellable,
       (GAsyncReadyCallback)get_ims_registration_status_ready, NULL);
 }
 
 void get_ims_services_state() {
-  g_print("Attempting to read IMS services status...\n");
+  g_print(" - Attempting to read IMS services status...\n");
   qmi_client_imsa_get_ims_services_status(
       ctx->client, NULL, 10, ctx->cancellable,
       (GAsyncReadyCallback)get_ims_services_status_ready, NULL);
@@ -203,7 +245,7 @@ static void imsa_attempt_bind_finish(QmiClientImsa *client, GAsyncResult *res) {
 }
 
 void imsa_attempt_bind() {
-  g_print("Attempting to bind to IMS...\n");
+  g_print(" - Attempting to bind to IMS...\n");
   QmiMessageImsaImsaBindSubscriptionInput *input;
   guint32 subscription_type = 0x00;
   input = qmi_message_imsa_imsa_bind_subscription_input_new();
