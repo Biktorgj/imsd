@@ -11,6 +11,7 @@
 #include <glib-unix.h>
 #include <libqmi-glib.h>
 #include <stdint.h>
+#include "imsd.h"
 G_BEGIN_DECLS
 enum {
     PROFILE_TYPE_3GPP = 1,
@@ -68,11 +69,17 @@ void wds_start(QmiDevice *device,
                 QmiClientWds *client,
                 GCancellable *cancellable);
 
-guint32 wds_get_packet_handle();
-guint8 wds_get_profile_id();
-guint8 wds_get_mux_id();
-void wds_copy_ip_address(uint8_t *ip_address);
-gboolean get_wds_ready_to_connect();
+guint32 wds_get_packet_handle(_WDS_Client *client);
+guint8 wds_get_profile_id(_WDS_Client *client);
+guint8 wds_get_mux_id(_WDS_Client *client);
+
+
+void wds_get_next_profile_settings(_WDS_Client *wds_client, _Profile_List *inner_ctx);
+
+gboolean get_wds_ready_to_connect(gpointer user_data);
+
+void initiate_wds_session(_WDS_Client *client, uint32_t sim_slot);
+void wds_init_context(QmiDevice *device, GCancellable *cancellable);
 G_END_DECLS
 
 #endif

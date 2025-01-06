@@ -10,9 +10,11 @@
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <libqmi-glib.h>
+#include "imsd.h"
 
 G_BEGIN_DECLS
 
+_Network_Provider_Data get_carrier_data();
 void nas_start(QmiDevice *device,
                 QmiClientNas *client,
                 GCancellable *cancellable);

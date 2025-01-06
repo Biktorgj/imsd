@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2024, Biktorgj
  */
-#include "qmi-ims-client.h"
+#include "imsd.h"
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <glib.h>
@@ -20,9 +20,9 @@ typedef struct {
 
 static Context *ctx;
 
-static Carrier current_carrier;
+static _Network_Provider_Data current_carrier;
 
-Carrier get_carrier_data() {
+_Network_Provider_Data get_carrier_data() {
   return current_carrier;
 }
 

@@ -3,7 +3,7 @@
 #include "dcm.h"
 #include "imsd.h"
 #include "qmi-util.h"
-#include "wds.h"
+#include "qmi-ims-client.h"
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <glib.h>
@@ -32,19 +32,6 @@
 
 */
 
-/* We probably have two sim slots
-   so we need to be able to track
-   two concurrent ims sessions */
-typedef struct {
-  uint8_t is_enabled;
-  uint32_t packet_handle; // WDS Packet handle associated with this PDP Session
-  uint8_t internal_pdp_id;
-  uint32_t pdp_sequence_id;
-  uint32_t pdp_instance_id;
-  uint32_t slot_id;
-  uint32_t pdp_subscription_id;
-} _DCM_PDP_Session;
-
 typedef struct {
   int sock_fd;
   GMainLoop *server_loop;
@@ -53,7 +40,6 @@ typedef struct {
   // We need to repurpose these:
   uint16_t transaction_id;
   _DCM_PDP_Session PDP_Session[MAX_SIM_SLOTS];
-  uint32_t active_sim_slot; // Not yet ready for multisim
 } QRTRServer;
 
 QRTRServer *server;
@@ -64,12 +50,25 @@ QRTRServer *server;
  * WDS and NAS need to work with it, so I just force it 
  * to slot 1 for now
  */
-gboolean notify_pdp_ipaddress_change(uint8_t *ip_address) { 
+gboolean notify_pdp_ipaddress_change(uint32_t slot_id, uint8_t *ip_address) { 
   char *outbuff = calloc(1024, sizeof(uint8_t));
   GHashTableIter iter;
   struct sockaddr_qrtr *client_addr;
   gpointer client_state;
   ssize_t outbuff_len = 0;
+  int active_sim_slot = -1;
+
+  for (int i = 0; i < MAX_SIM_SLOTS; i++) {
+    if (slot_id == server->PDP_Session[i].slot_id) {
+      active_sim_slot = i;
+    }
+  }
+  if (active_sim_slot == -1) {
+    g_print("[DCM] Fatal: Can't find the SIM where the connection is\n");
+    free(outbuff);
+    return FALSE;
+  }
+
   if (server->transaction_id == 99) {
     server->transaction_id = 1;
   } else {
@@ -79,7 +78,7 @@ gboolean notify_pdp_ipaddress_change(uint8_t *ip_address) {
   /* Get some stuff ready */
   /* Set the transaction ID */
   struct qmi_packet *pkt = (struct qmi_packet *)outbuff;
-  pkt->message_type = 0x02; // Indication!
+  pkt->message_type = 0x04; // Indication!
   pkt->msgid = IMS_DCM_PDP_ACTIVATE;
   pkt->transaction_id = server->transaction_id;
   outbuff_len += sizeof(struct qmi_packet);
@@ -98,7 +97,7 @@ gboolean notify_pdp_ipaddress_change(uint8_t *ip_address) {
       (struct qmi_generic_uint8_t_tlv *)(outbuff + outbuff_len);
   pdp_id->id = 0x01;
   pdp_id->len = 0x01;
-  pdp_id->data = server->PDP_Session[server->active_sim_slot].internal_pdp_id;
+  pdp_id->data = server->PDP_Session[active_sim_slot].internal_pdp_id;
   outbuff_len += sizeof(struct qmi_generic_uint8_t_tlv);
   
   /* Sequence, as provided by the activation request */
@@ -106,7 +105,7 @@ gboolean notify_pdp_ipaddress_change(uint8_t *ip_address) {
       (struct qmi_generic_uint32_t_tlv *)(outbuff + outbuff_len);
   pdp_sequence->id = 0x10;
   pdp_sequence->len = 0x04;
-  pdp_sequence->data = server->PDP_Session[server->active_sim_slot].pdp_sequence_id;
+  pdp_sequence->data = server->PDP_Session[active_sim_slot].pdp_sequence_id;
   outbuff_len += sizeof(struct qmi_generic_uint32_t_tlv);
 
   /* IP Address we got from the WDS service when we started the network */
@@ -123,7 +122,7 @@ gboolean notify_pdp_ipaddress_change(uint8_t *ip_address) {
       (struct qmi_generic_uint32_t_tlv *)(outbuff + outbuff_len);
   pdp_instance->id = 0x12;
   pdp_instance->len = 0x04;
-  pdp_instance->data = server->PDP_Session[server->active_sim_slot].pdp_instance_id;
+  pdp_instance->data = server->PDP_Session[active_sim_slot].pdp_instance_id;
   outbuff_len += sizeof(struct qmi_generic_uint32_t_tlv);
 
   pkt->length = outbuff_len - sizeof(struct qmi_packet);
@@ -178,7 +177,7 @@ static gboolean handle_incoming_qrtr_request(GIOChannel *source,
       return TRUE;
     }
 
-    gpointer client_key = g_memdup(&client_addr, sizeof(client_addr));
+    gpointer client_key = g_memdup2(&client_addr, sizeof(client_addr));
     if (!g_hash_table_contains(server->clients, client_key)) {
         g_hash_table_insert(server->clients, client_key, g_strdup("Client state"));
         g_print("New client added (node: %u, port: %u).\n", client_addr.sq_node, client_addr.sq_port);
@@ -257,6 +256,7 @@ static gboolean handle_incoming_qrtr_request(GIOChannel *source,
         server->PDP_Session[sim_slot].pdp_instance_id = pdp_instance->data;
         g_print(" - PDP Instance ID: %u\n", pdp_res->pdp_instance.data);
       }
+      request_network_start(sim_slot);
 
       /* QMI Response */
       pdp_res->response.result_code_type = 0x02;

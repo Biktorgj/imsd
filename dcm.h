@@ -195,7 +195,8 @@ struct ims_dcm_enable_status_req {
 
 // void dcm_start(GCancellable *cancellable);
 gpointer initialize_qmi_server(gpointer user_data);
-gboolean notify_pdp_ipaddress_change(uint8_t *ipaddr);
+gboolean notify_pdp_ipaddress_change(uint32_t slot_id, uint8_t *ip_address);
+
 G_END_DECLS
 
 #endif

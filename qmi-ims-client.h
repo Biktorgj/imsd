@@ -9,13 +9,9 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <glib-unix.h>
+#include <stdint.h>
 
 G_BEGIN_DECLS
-
-typedef struct {
-  guint16 mcc;
-  guint16 mnc;
-} Carrier;
 
 enum qmi_ims_service_errors {
     IMS_OPER_NOERR = 0x00000000,
@@ -39,8 +35,7 @@ enum initialization_state {
     IMS_INIT_ERR = 2
 };
 
-Carrier get_carrier_data();
-void get_autoconnect_settings();
+void request_network_start(uint32_t sim_slot);
 
 void cancel_connection_manager();
 void release_clients ();

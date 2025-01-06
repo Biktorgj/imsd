@@ -136,11 +136,6 @@ int main(int argc, char **argv) {
    *     the modem
    */
 
-  /*
-    if (!create_qmi_client_connection(device_path, cancellable))
-      return EXIT_FAILURE;
-  */
-
   GThread *qmi_client = g_thread_new("QMI Client", initialize_qmi_client, runtime);
   GThread *qmi_server = g_thread_new("QMI Server", initialize_qmi_server, runtime);
 
