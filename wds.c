@@ -769,7 +769,7 @@ static void wds_get_current_settings_ready(QmiClientWds *client, GAsyncResult *r
 
   qmi_inet4_ntop(addr, buf, sizeof(buf));
   g_print("IPv4 Address: %s/%d\n", buf, prefix);
-  strncpy((char *)wds_client->packet_session.ip_address, buf, strlen(buf));
+  memcpy(wds_client->packet_session.ip_address, buf, strlen(buf));
  // strncpy(address, buf, sizeof(address));
   // sprintf(temp, "ip addr add %s/%d dev %s ", buf, prefix,
    //       wds_client->packet_session.link_name);

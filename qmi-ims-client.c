@@ -10,6 +10,7 @@
 #include "imss.h"
 #include "nas.h"
 #include "wds.h"
+#include "pdc.h"
 #include <gio/gio.h>
 #include <glib-unix.h>
 #include <glib.h>
@@ -272,6 +273,23 @@ static void nas_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
             imsd_runtime->cancellable);
 }
 
+static void pdc_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
+  GError *error = NULL;
+  imsd_client->handles.pdc =
+      qmi_device_allocate_client_finish(dev, res, &error);
+  if (!imsd_client->handles.pdc) {
+    imsd_client->readiness.pdc_ready = IMS_INIT_ERR;
+
+    g_printerr("error: couldn't create client for the PDC service: %s\n",
+               error->message);
+    exit(EXIT_FAILURE);
+  }
+  g_printerr("PDC Allocated!\n");
+  imsd_client->readiness.pdc_ready = IMS_INIT_OK;
+  pdc_start(dev, QMI_CLIENT_PDC(imsd_client->handles.pdc),
+            imsd_runtime->cancellable);
+}
+
 static void imsa_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
   GError *error = NULL;
   imsd_client->handles.imsa[0] =
@@ -333,6 +351,10 @@ static void device_open_ready(QmiDevice *dev, GAsyncResult *res) {
       (GAsyncReadyCallback)nas_allocate_client_ready, NULL);
 
   qmi_device_allocate_client(
+      dev, QMI_SERVICE_PDC, QMI_CID_NONE, 10, imsd_runtime->cancellable,
+      (GAsyncReadyCallback)pdc_allocate_client_ready, NULL);
+
+  qmi_device_allocate_client(
       dev, QMI_SERVICE_IMSA, QMI_CID_NONE, 10, imsd_runtime->cancellable,
       (GAsyncReadyCallback)imsa_allocate_client_ready, NULL);
 
@@ -359,6 +381,7 @@ gboolean wait_for_init(void *data) {
   imsd_runtime->current_network_provider[0] = get_carrier_data();
   g_print("[QMI Client] Client allocation status:\n");
   g_print(" - Network Access Service: %s\n", imsd_client->readiness.nas_ready ? "Ready":"Not ready" );
+  g_print(" - Persistent Device Configuration Service: %s\n", imsd_client->readiness.pdc_ready ? "Ready":"Not ready" );
   g_print(" - IMS Settings Service: %s\n", imsd_client->readiness.imss_ready? "Ready":"Not ready");
   g_print(" - IMS Application Service: %s\n", imsd_client->readiness.imsa_ready? "Ready":"Not ready");
   g_print(" - Device Management Service: %s\n", imsd_client->readiness.dms_ready? "Ready":"Not ready");
@@ -368,7 +391,7 @@ gboolean wait_for_init(void *data) {
   for (uint8_t i = 0; i < MAX_SIM_SLOTS; i++) {
     g_print(" - SIM Slot %u\n", i);
     g_print("   - Network: %i-%i\n", imsd_runtime->current_network_provider[i].mcc, imsd_runtime->current_network_provider[i].mnc);
-    g_print("   - Voice Service (Slot %u): %s\n",i,  imsd_client->readiness.voice_svc_ready[i]? "Ready":"Not ready");
+    g_print("   - Voice Service (call monitoring) (Slot %u): %s\n",i,  imsd_client->readiness.voice_svc_ready[i]? "Ready":"Not ready");
     g_print("   - Wireless Data Service (Slot %u): %s \n",i ,imsd_client->WDS_Client[i].wds_ready? "Ready":"Not ready");
   }
   /*
