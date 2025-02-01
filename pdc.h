@@ -1,7 +1,4 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
-/*
- * Copyright (c) 2024, Biktorgj
- */
 
 #ifndef PDC_H
 #define PDC_H

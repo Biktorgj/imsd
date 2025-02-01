@@ -6,7 +6,7 @@
 project (
   'imsd',
   'c',
-  version : '0.0.4',
+  version : '0.0.5',
   license : 'LGPLv3+',
   meson_version : '>= 0.50.0',
   default_options :
@@ -36,6 +36,7 @@ deps = [
   dependency('gobject-2.0'),
   dependency('qmi-glib'),
   dependency('qrtr-glib'),
+  dependency('inih'),
   libqrtr,
 ]
 
@@ -53,7 +54,9 @@ executable('imsd',
   'dms.c',
   'dcm.c',
   'pdc.c',
+  'pdc_locate.c',
   'qmi-util.c',
   'qmi-ims-client.c',
+  'config.c',
   dependencies: deps,
 )

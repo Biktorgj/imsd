@@ -7,6 +7,9 @@
 #include <glib/gprintf.h>
 #include <libqmi-glib.h>
 #include <libqrtr-glib.h>
+#include "mcfg.h"
+#include "imsd.h"
+
 #define LIST_CONFIGS_TIMEOUT_SECS 2
 
 /*
@@ -468,5 +471,6 @@ void pdc_start(QmiDevice *device, QmiClientPdc *client,
   ctx->device = g_object_ref(device);
   ctx->client = g_object_ref(client);
   ctx->cancellable = g_object_ref(cancellable);
+  scan_pdc_mcfgs(PDC_FOLDER_PATH);
   run_list_configs();
 }

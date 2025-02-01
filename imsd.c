@@ -8,7 +8,7 @@
  * | | | | | | \__ \ (_| |  *
  * |_|_| |_| |_|___/\__,_|  *
  *                          *
- *        version 0.0.3     *
+ *        version 0.0.5     *
  ****************************/
 #include <fcntl.h>
 #include <stdbool.h>
@@ -31,6 +31,7 @@
 #include "dcm.h"
 #include "imsd.h"
 #include "qmi-ims-client.h"
+#include "config.h"
 
 /*
  *  The basic idea:
@@ -83,6 +84,23 @@ static GOptionEntry imsd_params[] = {
 //   return FALSE;
 // }
 
+
+int load_main_config() {
+    // Load main configuration
+    IMSD_Config mainConfig = {0};
+    load_config(CONFIG_FILE, &mainConfig);
+
+    printf("IMSD Base config:\n");
+    printf("  Phone Model: %s\n", mainConfig.phone_model);
+    printf("  SIM Slots: %u\n", mainConfig.sim_slots);
+    printf("  MCFG Configuration files path: %s\n", mainConfig.mcfg_config_path);
+    printf("  Fallback APN if no compatible MCFG files are found: %s\n", mainConfig.fallback_apn);
+    printf("  Needs custom VoLTE Mixers: %i\n", mainConfig.uses_custom_volte_mixers);
+    printf("  Custom playback Mixers: %s\n", mainConfig.playback_mixers);
+    printf("  Custom Recording Mixers: %s\n", mainConfig.recording_mixers);
+    return 0;
+}
+
 int main(int argc, char **argv) {
   int lockfile;
   fprintf(stdout, "IMS Daemon %s \n", RELEASE_VER);
@@ -119,7 +137,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%s is already running!\n", PROG_NAME);
     return -EBUSY;
   }
-
+  load_main_config();
   /* Create a slice for the runtime */
   runtime = g_new(IMSD_Runtime, 1);
   
