@@ -54,6 +54,7 @@ typedef struct {
   QmiClient *imsrtp;
   QmiClient *dms;
   QmiClient *pdc;
+  QmiClient *mfs;
   QmiClient *imsa[MAX_SIM_SLOTS]; // One-per-sim!
   QmiClient *wds_ipv4[MAX_SIM_SLOTS];
   QmiClient *wds_ipv6[MAX_SIM_SLOTS];

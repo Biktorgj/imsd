@@ -4,6 +4,7 @@
  */
 #include "qmi-ims-client.h"
 #include "dcm.h"
+#include "mfs.h"
 #include "dms.h"
 #include "imsa.h"
 #include "imsd.h"
@@ -324,6 +325,23 @@ static void dms_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
             imsd_runtime->cancellable);
 }
 
+static void mfs_allocate_client_ready(QmiDevice *dev, GAsyncResult *res) {
+  GError *error = NULL;
+  imsd_client->handles.mfs =
+      qmi_device_allocate_client_finish(dev, res, &error);
+  if (!imsd_client->handles.mfs) {
+    imsd_client->readiness.mfs_ready = IMS_INIT_ERR;
+
+    g_printerr("error: couldn't create client for the MFS service: %s\n",
+               error->message);
+    exit(EXIT_FAILURE);
+  }
+  g_printerr("MFS Allocated!\n");
+  imsd_client->readiness.mfs_ready = IMS_INIT_OK;
+  mfs_allocate(dev, QMI_CLIENT_MFS(imsd_client->handles.mfs),
+            imsd_runtime->cancellable);
+}
+
 /* Allocate clients for all of our services
    We will finish when the callback is triggered from libqmi
 */
@@ -369,6 +387,10 @@ static void device_open_ready(QmiDevice *dev, GAsyncResult *res) {
   qmi_device_allocate_client(
       dev, QMI_SERVICE_IMSRTP, QMI_CID_NONE, 10, imsd_runtime->cancellable,
       (GAsyncReadyCallback)imsrtp_allocate_client_ready, NULL);
+ 
+  qmi_device_allocate_client(
+      dev, QMI_SERVICE_MFS, QMI_CID_NONE, 10, imsd_runtime->cancellable,
+      (GAsyncReadyCallback)mfs_allocate_client_ready, NULL);
 }
 /*
 static void do_allocate_rest(QmiDevice *dev) {
@@ -497,7 +519,8 @@ gpointer initialize_qmi_client(gpointer user_data) {
   imsd_runtime = (IMSD_Runtime *)user_data;
   imsd_client = g_new(_IMSD_Client, 1);
   g_autofree gchar *fd = NULL;
-
+     qmi_utils_set_traces_enabled (TRUE);
+    qmi_utils_set_show_personal_info (TRUE);
   g_print("[QMI Client] Start\n");
 
   fd = g_file_get_path(imsd_runtime->client_path);
