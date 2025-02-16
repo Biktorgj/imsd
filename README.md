@@ -1,3 +1,6 @@
+# This project has been moved and no further code will be commited here.
+Please go to the new location at [PostmarketOS](https://gitlab.postmarketos.org/modem/openimsd/openimsd)
+
 # IMSD
 
 A small(ish?) daemon to control IMS on Qualcomm Modems via QMI / QRTR.
